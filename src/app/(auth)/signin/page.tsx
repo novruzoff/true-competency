@@ -43,8 +43,10 @@ export default function SignInPage() {
           window.location.href = '/';
         }
       }
-    } catch (err: any) {
-      setMsg(err.message ?? 'Something went wrong');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Something went wrong';
+      setMsg(message);
     } finally {
       setLoading(false);
     }
