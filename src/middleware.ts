@@ -5,9 +5,20 @@ const PUBLIC_PATHS = new Set(['/', '/signin', '/topics']);
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (
+    pathname.startsWith('/_next') ||       // Next internal assets
+    pathname.startsWith('/api') ||         // your API routes if any
+    pathname.startsWith('/favicon') ||     // favicon.ico, etc.
+    /\.[a-zA-Z0-9]+$/.test(pathname)       // any file with extension (e.g., /TC_Logo.png)
+  ) {
+    return NextResponse.next();
+  }
+
+  // public routes that don't require auth
   const isPublic = PUBLIC_PATHS.has(pathname);
 
-  // Supabase sets a cookie "sb-access-token" for signed-in users
+  // Supabase sets these cookies when authenticated
   const token = req.cookies.get('sb-access-token')?.value;
 
   if (!isPublic && !token) {
@@ -15,10 +26,11 @@ export function middleware(req: NextRequest) {
     url.pathname = '/signin';
     return NextResponse.redirect(url);
   }
+
   return NextResponse.next();
 }
 
-// run on all routes
+// apply to all routes
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image).*)'],
 };

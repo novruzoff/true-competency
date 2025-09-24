@@ -1,49 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import Image from "next/image";
+import { supabase } from "@/lib/supabaseClient";
 
 type Role = "resident" | "attending" | "committee";
-
-function TCMark() {
-  // small stethoscope + heart mark used above the title
-  return (
-    <div className="mx-auto mb-4 flex items-center justify-center gap-2">
-      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-        {/* stethoscope */}
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          className=""
-        >
-          <path
-            d="M6 4v5a4 4 0 0 0 8 0V4M6 6H4v3a6 6 0 1 0 12 0V6h-2"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M18 14a3 3 0 1 0 0 6h1a3 3 0 0 0 0-6h-1z"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-        {/* heart */}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12.001 20.727c-.31 0-.62-.114-.858-.341l-6.89-6.55A5.502 5.502 0 0 1 7.7 3.5c1.271 0 2.49.46 3.4 1.3a5.06 5.06 0 0 1 .9 1.09 5.06 5.06 0 0 1 .9-1.09 5.2 5.2 0 0 1 3.4-1.3 5.5 5.5 0 0 1 4.447 9.336l-6.89 6.55c-.237.226-.547.341-.858.341z" />
-        </svg>
-      </span>
-    </div>
-  );
-}
 
 function RoleCard({
   title,
@@ -125,50 +86,191 @@ export default function SignInPage() {
         if (data.user) window.location.href = "/";
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Something went wrong";
-      setMsg(message);
+      setMsg(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
-      {/* Logo */}
-      <div className="mb-6">
-        <Image
-          src="/TC_Logo.png"
-          alt="True Competency Logo"
-          width={120}
-          height={120}
-          priority
-        />
-      </div>
+    <div className="min-h-[100dvh] bg-gradient-to-b from-[#EEF4FF] to-white">
+      <div className="mx-auto max-w-3xl px-4 py-12">
+        {/* Brand header with your REAL logo */}
+        <div className="mx-auto mb-4 flex flex-col items-center">
+          <Image
+            src="/TC_Logo.png"
+            alt="True Competency"
+            width={120}
+            height={120}
+            priority
+            className="mb-2"
+          />
+          <h1 className="text-center text-3xl font-semibold tracking-tight text-[#4f75fc]">
+            True Competency
+          </h1>
+          <p className="mt-1 text-center text-sm text-gray-600">
+            Interventional Cardiology Training Platform
+          </p>
+          <span className="mt-2 inline-block rounded-full border px-3 py-1 text-xs text-gray-700">
+            Medical Training Portal
+          </span>
+        </div>
 
-      {/* Sign-in form */}
-      <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-md">
-        <h1 className="mb-6 text-center text-2xl font-semibold text-gray-800">
-          Sign in to True Competency
-        </h1>
-        <form className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            className="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-          >
-            Sign In
-          </button>
-        </form>
+        {/* Main card */}
+        <div className="mx-auto mt-8 max-w-2xl rounded-2xl bg-white/90 p-6 shadow-xl ring-1 ring-gray-200">
+          <h2 className="mb-1 text-center text-xl font-semibold text-[#4f75fc]">
+            Welcome Back
+          </h2>
+          <p className="mb-6 text-center text-sm text-gray-600">
+            Sign in to access your dashboard
+          </p>
+
+          {/* Role selector only on sign up */}
+          {mode === "signup" && (
+            <>
+              <p className="mb-2 text-sm font-medium">I am a:</p>
+              <div className="mb-6 grid gap-3">
+                <RoleCard
+                  title="Resident | Fellow"
+                  desc="Track your competency progress"
+                  active={role === "resident"}
+                  onClick={() => setRole("resident")}
+                  icon={
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <circle
+                        cx="12"
+                        cy="7"
+                        r="3"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <path
+                        d="M4 20a8 8 0 0 1 16 0"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  }
+                />
+                <RoleCard
+                  title="Attending Physician"
+                  desc="Supervise and assess residents/fellows"
+                  active={role === "attending"}
+                  onClick={() => setRole("attending")}
+                  icon={
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M12 3v6M9 6h6"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                      <rect
+                        x="5"
+                        y="9"
+                        width="14"
+                        height="10"
+                        rx="2"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                    </svg>
+                  }
+                />
+                <RoleCard
+                  title="Competency Committee"
+                  desc="Manage competency framework and standards"
+                  active={role === "committee"}
+                  onClick={() => setRole("committee")}
+                  icon={
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M4 6h16M4 12h16M4 18h10"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          {/* Auth form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                required
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="doctor@hospital.com"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 outline-none focus:border-gray-300"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Password</label>
+              <input
+                type="password"
+                value={password}
+                required
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 outline-none focus:border-gray-300"
+              />
+            </div>
+            <button
+              disabled={loading}
+              className="mt-2 w-full rounded-lg bg-[#0A0A14] py-2.5 font-medium text-white disabled:opacity-60"
+            >
+              {loading
+                ? "Please wait…"
+                : mode === "signup"
+                ? "Create Account"
+                : "Sign In"}
+            </button>
+          </form>
+
+          <div className="my-4 border-t" />
+          <p className="text-center text-sm">
+            {mode === "signin" ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  onClick={() => setMode("signup")}
+                  className="font-medium text-blue-600 underline-offset-2 hover:underline"
+                >
+                  Create account here
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  onClick={() => setMode("signin")}
+                  className="font-medium text-blue-600 underline-offset-2 hover:underline"
+                >
+                  Sign in here
+                </button>
+              </>
+            )}
+          </p>
+
+          <div className="mt-6 rounded-xl bg-blue-50 p-4 text-sm leading-relaxed text-blue-900">
+            <p className="font-semibold">Demo Account:</p>
+            <p>Use any email and password to access the demo dashboard.</p>
+            <p>Select your role above to access the appropriate portal.</p>
+          </div>
+
+          {msg && (
+            <p className="mt-4 text-center text-sm text-red-600">{msg}</p>
+          )}
+        </div>
       </div>
     </div>
   );
