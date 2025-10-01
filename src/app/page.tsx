@@ -2,17 +2,26 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 
-// --- Minimal client in-file so you can paste this as a single file ---
+// --- Minimal client in-file so this works standalone ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+
+// --- Roles & profile typing ---
+type UserRole = "trainee" | "instructor" | "committee";
+type Profile = { id: string; role: UserRole };
+const ROLE_HOME: Record<Exclude<UserRole, "committee">, string> = {
+  trainee: "/trainee",
+  instructor: "/instructor",
+};
 
 // --- Types matching your table ---
 type Competency = {
   id: string;
   name: string;
-  difficulty: string; // text with your CHECK or freeform
+  difficulty: string;
   tags: string[]; // text[]
   test_question: string | null;
   created_at: string;
@@ -25,9 +34,150 @@ const DIFFICULTIES = [
   "Expert",
 ] as const;
 
-export default function DashboardPage() {
-  // Auth (optional UI nicety)
+export default function Page() {
+  const router = useRouter();
+
+  // Auth + role gate
+  const [checking, setChecking] = useState(true);
+  const [needsSignin, setNeedsSignin] = useState(false);
+  const [isCommittee, setIsCommittee] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [gateErr, setGateErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: u, error: uerr } = await supabase.auth.getUser();
+        if (uerr) throw uerr;
+        const uid = u.user?.id ?? null;
+        setUserEmail(u.user?.email ?? null);
+
+        if (!uid) {
+          if (!cancelled) {
+            setNeedsSignin(true);
+            setChecking(false);
+          }
+          return;
+        }
+
+        const { data: prof, error: perr } = await supabase
+          .from("profiles")
+          .select("id, role")
+          .eq("id", uid)
+          .single<Profile>();
+
+        if (perr) throw perr;
+
+        if (prof.role === "committee") {
+          if (!cancelled) {
+            setIsCommittee(true); // render the committee catalog on root
+            setChecking(false);
+          }
+          return;
+        }
+
+        // redirect trainees/instructors to their homes
+        if (prof.role === "trainee" || prof.role === "instructor") {
+          router.replace(ROLE_HOME[prof.role]);
+          return;
+        }
+
+        // unknown role fallback
+        if (!cancelled) {
+          setGateErr(`Unknown role: ${String((prof as Profile).role)}`);
+          setChecking(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setGateErr(e instanceof Error ? e.message : String(e));
+          setChecking(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  if (checking) {
+    return (
+      <Shell email={userEmail}>
+        <div className="text-sm text-neutral-400">Checking session…</div>
+      </Shell>
+    );
+  }
+
+  if (needsSignin) {
+    return (
+      <Shell email={userEmail}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm text-neutral-400">
+            You’re not signed in.
+          </span>
+          <a
+            href="/signin"
+            className="rounded-xl bg-neutral-100 text-neutral-900 px-4 py-2.5 text-sm font-semibold hover:bg-white/90"
+          >
+            Go to sign in →
+          </a>
+        </div>
+      </Shell>
+    );
+  }
+
+  if (gateErr) {
+    return (
+      <Shell email={userEmail}>
+        <div className="mb-4 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+          {gateErr}
+        </div>
+      </Shell>
+    );
+  }
+
+  // Committee members see the catalog dashboard on root:
+  return <CommitteeCatalog initialEmail={userEmail} />;
+}
+
+/* ------------------------ Shared shell for header ------------------------ */
+function Shell({
+  children,
+  email,
+}: {
+  children: React.ReactNode;
+  email: string | null;
+}) {
+  return (
+    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+      <header className="border-b border-neutral-800">
+        <div className="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-2xl bg-neutral-800 grid place-items-center text-sm font-bold">
+              TC
+            </div>
+            <div>
+              <h1 className="text-lg md:text-xl font-semibold tracking-tight">
+                True Competency
+              </h1>
+              <p className="text-xs text-neutral-400">Role-aware landing</p>
+            </div>
+          </div>
+          <div className="text-sm text-neutral-400">
+            {email ? `Signed in as ${email}` : "Not signed in"}
+          </div>
+        </div>
+      </header>
+      <section className="mx-auto max-w-7xl px-6 py-6">{children}</section>
+    </div>
+  );
+}
+
+/* ----------------------- Committee catalog component --------------------- */
+
+function CommitteeCatalog({ initialEmail }: { initialEmail: string | null }) {
+  // Auth nicety
+  const [userEmail] = useState<string | null>(initialEmail);
 
   // Data + UI state
   const [items, setItems] = useState<Competency[]>([]);
@@ -53,14 +203,6 @@ export default function DashboardPage() {
 
   const debouncedQ = useDebouncedValue(q, 300);
 
-  // Load user (optional)
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setUserEmail(data.user?.email ?? null);
-    })();
-  }, []);
-
   // Fetch data whenever filters/page change
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +220,6 @@ export default function DashboardPage() {
           .order("created_at", { ascending: false });
 
         if (debouncedQ.trim()) {
-          // Case-insensitive LIKE on name
           query = query.ilike("name", `%${debouncedQ.trim()}%`);
         }
 
@@ -87,8 +228,7 @@ export default function DashboardPage() {
         }
 
         if (selectedTags.length > 0) {
-          // Supabase Postgres array contains: ALL of these tags must be present
-          // If you want ANY tag match, loop and OR on the client side with a filter after.
+          // require ALL selected tags
           query = query.contains("tags", selectedTags);
         }
 
@@ -100,8 +240,9 @@ export default function DashboardPage() {
 
         setItems((data ?? []) as Competency[]);
         setTotal(count ?? 0);
-      } catch (e: any) {
-        if (!cancelled) setErr(e.message ?? "Failed to load data.");
+      } catch (e) {
+        if (!cancelled)
+          setErr(e instanceof Error ? e.message : "Failed to load data.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -118,7 +259,6 @@ export default function DashboardPage() {
     items.forEach((it) => {
       (it.tags ?? []).forEach((t) => counts.set(t, 1 + (counts.get(t) ?? 0)));
     });
-    // Sort by frequency desc, then by name
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 20);
@@ -137,7 +277,7 @@ export default function DashboardPage() {
     const t = normalizeTag(tagInput);
     if (!t) return;
     if (!selectedTags.includes(t)) {
-      setSelectedTags([...selectedTags, t]);
+      setSelectedTags((prev) => [...prev, t]);
       setPage(1);
     }
     setTagInput("");
@@ -152,7 +292,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      {/* Header */}
+      {/* Header (committee-specific subtitle) */}
       <header className="border-b border-neutral-800">
         <div className="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -161,10 +301,10 @@ export default function DashboardPage() {
             </div>
             <div>
               <h1 className="text-lg md:text-xl font-semibold tracking-tight">
-                True Competency — Dashboard
+                True Competency — Committee
               </h1>
               <p className="text-xs text-neutral-400">
-                Browse and filter IVUS competencies
+                Manage and review IVUS competencies
               </p>
             </div>
           </div>
@@ -339,11 +479,13 @@ export default function DashboardPage() {
             Prev
           </button>
           <span className="text-sm text-neutral-400">
-            Page {page} / {totalPages}
+            Page {page} / {Math.max(1, Math.ceil(total / pageSize))}
           </span>
           <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            disabled={
+              page >= Math.max(1, Math.ceil(total / pageSize)) || loading
+            }
             className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm disabled:opacity-50"
           >
             Next
@@ -354,7 +496,7 @@ export default function DashboardPage() {
   );
 }
 
-// -- Components ------------------------------------------------------------
+/* ------------------------------ Components ------------------------------ */
 
 function CompetencyCard({ item }: { item: Competency }) {
   return (
@@ -366,7 +508,6 @@ function CompetencyCard({ item }: { item: Competency }) {
         </span>
       </div>
 
-      {/* Tags */}
       {item.tags?.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {item.tags.map((t) => (
@@ -382,11 +523,10 @@ function CompetencyCard({ item }: { item: Competency }) {
         <p className="mt-3 text-xs text-neutral-500 italic">No tags</p>
       )}
 
-      {/* Placeholder for future: test question */}
       <div className="mt-4 rounded-xl bg-neutral-950/40 border border-neutral-800 p-3">
         <p className="text-xs text-neutral-400">Test question</p>
         <p className="text-sm text-neutral-300 mt-1">
-          {item.test_question ? item.test_question : "—"}
+          {item.test_question ?? "—"}
         </p>
       </div>
 
@@ -412,7 +552,7 @@ function CardSkeleton() {
   );
 }
 
-// -- Hooks & utils ---------------------------------------------------------
+/* ------------------------------ Hooks/utils ----------------------------- */
 
 function useDebouncedValue<T>(value: T, delay: number) {
   const [v, setV] = useState(value);
