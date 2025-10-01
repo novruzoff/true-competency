@@ -5,8 +5,8 @@ import { supabase } from "@/lib/supabaseClient";
 
 type Profile = {
   id: string;
-  display_name: string | null;
   role: "student" | "doctor";
+  // display_name removed since your table doesn’t have it
 };
 
 type Overall = {
@@ -15,9 +15,15 @@ type Overall = {
   topics_count: number;
 };
 
-type StudentWithOverall = {
-  s: Profile;
-  o: Overall | undefined;
+type StudentWithOverall = { s: Profile; o?: Overall };
+
+const T = {
+  CANVAS: "#0b0c0f",
+  SURFACE: "#121418",
+  BORDER: "#1f232a",
+  TEXT: "#e6e7ea",
+  MUTED: "#9aa0a6",
+  ACCENT: "#6ae6b2",
 };
 
 export default function DoctorDashboard() {
@@ -29,11 +35,9 @@ export default function DoctorDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       setLoading(true);
       setErr(null);
-
       try {
         const { data: userRes, error: getUserErr } =
           await supabase.auth.getUser();
@@ -42,22 +46,22 @@ export default function DoctorDashboard() {
         setEmail(userRes.user?.email ?? null);
         if (!uid) throw new Error("Not signed in");
 
+        // Doctor profile (only fetch fields that exist)
         const { data: doctor, error: profErr } = await supabase
           .from("profiles")
-          .select("id, display_name, role")
+          .select("id, role")
           .eq("id", uid)
           .single<Profile>();
         if (profErr) throw profErr;
         if (doctor.role !== "doctor")
           throw new Error("You must be a doctor to view this dashboard.");
-        if (cancelled) return;
 
+        // Fetch assigned students
         const { data: rels, error: relErr } = await supabase
           .from("doctor_students")
           .select("student_id")
           .eq("doctor_id", doctor.id);
         if (relErr) throw relErr;
-        if (cancelled) return;
 
         const studentIds = (rels ?? []).map(
           (r: { student_id: string }) => r.student_id
@@ -68,96 +72,143 @@ export default function DoctorDashboard() {
           return;
         }
 
+        // Profiles of those students
         const { data: profs, error: profsErr } = await supabase
           .from("profiles")
-          .select("id, display_name, role")
+          .select("id, role")
           .in("id", studentIds);
         if (profsErr) throw profsErr;
-        if (cancelled) return;
-
         setStudents((profs ?? []) as Profile[]);
 
+        // Overall progress
         const { data: agg, error: aggErr } = await supabase
           .from("student_overall_progress")
           .select("student_id, overall_pct, topics_count")
           .in("student_id", studentIds);
         if (aggErr) throw aggErr;
-        if (cancelled) return;
-
         setOverall((agg ?? []) as Overall[]);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (!cancelled) setErr(msg);
+        setErr(e instanceof Error ? e.message : String(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, []);
 
   const byStudent: StudentWithOverall[] = useMemo(() => {
-    const map = new Map<string, Overall>(overall.map((o) => [o.student_id, o]));
-    const list = students.map((s) => ({ s, o: map.get(s.id) }));
-    list.sort((a, b) => (b.o?.overall_pct ?? 0) - (a.o?.overall_pct ?? 0));
-    return list;
+    const map = new Map(overall.map((o) => [o.student_id, o]));
+    return students
+      .map((s) => ({ s, o: map.get(s.id) }))
+      .sort((a, b) => (b.o?.overall_pct ?? 0) - (a.o?.overall_pct ?? 0));
   }, [students, overall]);
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="border-b border-neutral-800">
-        <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">True Competency — Doctor</h1>
-          <div className="text-sm text-neutral-400">
+    <main style={{ minHeight: "100vh", background: T.CANVAS, color: T.TEXT }}>
+      <header style={{ borderBottom: `1px solid ${T.BORDER}` }}>
+        <div
+          style={{
+            maxWidth: 1120,
+            margin: "0 auto",
+            padding: "16px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <h1 style={{ fontSize: 18, fontWeight: 600 }}>
+            True Competency — Doctor
+          </h1>
+          <div style={{ fontSize: 13, color: T.MUTED }}>
             {email ?? "Not signed in"}
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 py-6">
-        <h2 className="text-base font-medium mb-4">Your Students</h2>
-
-        {loading && <div className="text-neutral-400">Loading…</div>}
+      <section
+        style={{ maxWidth: 1120, margin: "0 auto", padding: "16px 24px" }}
+      >
         {err && (
-          <div className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+          <div
+            style={{
+              border: "1px solid #5c1d22",
+              background: "#2a0f13",
+              color: "#fecdd3",
+              borderRadius: 12,
+              padding: 10,
+              fontSize: 14,
+              marginBottom: 12,
+            }}
+          >
             {err}
           </div>
         )}
 
         {!loading && !err && byStudent.length === 0 && (
-          <div className="text-neutral-400">No students assigned yet.</div>
+          <div style={{ color: T.MUTED }}>No students assigned yet.</div>
         )}
 
-        <div className="space-y-3">
+        <div style={{ display: "grid", gap: 10 }}>
           {byStudent.map(({ s, o }) => (
             <article
               key={s.id}
-              className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
+              style={{
+                background: T.SURFACE,
+                border: `1px solid ${T.BORDER}`,
+                borderRadius: 16,
+                padding: 16,
+              }}
             >
-              <div className="flex items-center justify-between">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <div>
-                  <div className="font-medium">
-                    {s.display_name ?? "(no name)"}
+                  {/* Fallback label since display_name doesn’t exist */}
+                  <div style={{ fontWeight: 600 }}>
+                    Student {s.id.slice(0, 8)}…
                   </div>
-                  <div className="text-xs text-neutral-400">
+                  <div style={{ fontSize: 12, color: T.MUTED }}>
                     {o ? `${o.topics_count} topics` : "No topics"}
                   </div>
                 </div>
                 <a
-                  className="text-sm underline underline-offset-4 hover:text-white"
                   href={`/doctor/student/${s.id}`}
+                  style={{
+                    fontSize: 13,
+                    color: T.TEXT,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 4,
+                    opacity: 0.9,
+                  }}
                 >
                   View details →
                 </a>
               </div>
 
-              <div className="mt-3 h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
+              <div
+                style={{
+                  marginTop: 10,
+                  height: 8,
+                  width: "100%",
+                  borderRadius: 999,
+                  background: "#0c0d11",
+                  outline: `1px solid ${T.BORDER}`,
+                  overflow: "hidden",
+                }}
+                title={`${o?.overall_pct ?? 0}%`}
+              >
                 <div
-                  className="h-full bg-neutral-100"
-                  style={{ width: `${o?.overall_pct ?? 0}%` }}
-                  title={`${o?.overall_pct ?? 0}%`}
+                  style={{
+                    height: "100%",
+                    width: `${o?.overall_pct ?? 0}%`,
+                    background: T.ACCENT,
+                  }}
                 />
               </div>
             </article>
