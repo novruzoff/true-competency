@@ -28,7 +28,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Only protect specific app sections (student/doctor). Everything else stays public.
-  const PROTECT_PREFIXES = ['/student', '/doctor'];
+  const PROTECT_PREFIXES = ['/trainee', '/instructor', '/committee'];
 
   // If the path isn’t protected, pass through.
   if (!PROTECT_PREFIXES.some((p) => pathname.startsWith(p))) {
