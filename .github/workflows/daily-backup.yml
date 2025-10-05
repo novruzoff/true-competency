@@ -1,34 +1,145 @@
 name: Supa-backup
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  # Run manually (with optional force to bypass the 3am guard)
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Run backup even if it's not 3:00 AM Toronto"
+        required: false
+        default: "false"
+
+  # Optional: fire on pushes/PRs (keep or remove to taste)
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+  # 3:00 AM America/Toronto across DST (EDT=07:00 UTC, EST=08:00 UTC)
   schedule:
-    - cron: "0 3 * * *" # Runs daily at 03:00 UTC
+    - cron: "0 7 * * *"
+    - cron: "0 8 * * *"
+
 jobs:
   run_db_backup:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      supabase_db_url: ${{ secrets.SUPABASE_DB_URL }} # For example: postgresql://postgres:[YOUR-PASSWORD]@db.<ref>.supabase.co:5432/postgres
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-      - name: Backup roles
-        run: supabase db dump --db-url "$supabase_db_url" -f roles.sql --role-only
-      - name: Backup schema
-        run: supabase db dump --db-url "$supabase_db_url" -f schema.sql
-      - name: Backup data
-        run: supabase db dump --db-url "$supabase_db_url" -f data.sql --data-only --use-copy
 
-      - uses: stefanzweifel/git-auto-commit-action@v4
+    env:
+      # --- REQUIRED repo secrets (Settings → Secrets and variables → Actions) ---
+      # SUPABASE_POOLER_HOST (e.g. aws-1-us-east-2.pooler.supabase.com)
+      # SUPABASE_POOLER_PORT (e.g. 6543 for transaction pooler, or 5432 for session)
+      # SUPABASE_DB  (usually "postgres")
+      # SUPABASE_USER (usually "postgres")
+      # SUPABASE_PASSWORD
+      SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
+      SUPABASE_POOLER_PORT: ${{ secrets.SUPABASE_POOLER_PORT }}
+      SUPABASE_DB: ${{ secrets.SUPABASE_DB }}
+      SUPABASE_USER: ${{ secrets.SUPABASE_USER }}
+      SUPABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+
+      # Where backups are stored in the repo
+      BACKUP_DIR: backups
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        # no ref override → works for push/PR/manual
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Only run at 3:00 AM Toronto unless forced
+        id: guard
+        shell: bash
+        run: |
+          FORCE="${{ github.event.inputs.force }}"
+          HOUR_TORONTO=$(TZ=America/Toronto date +%H)
+          if [ "$FORCE" = "true" ] || [ "$FORCE" = "True" ] || [ "$FORCE" = "1" ]; then
+            echo "Forced run requested. Proceeding."
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR_TORONTO" = "03" ]; then
+            echo "It's 3am in America/Toronto. Proceeding."
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not 3am in America/Toronto (it's ${HOUR_TORONTO}:00). Skipping."
+            echo "run_backup=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build connection string (IPv4 via Supabase pooler)
+        if: steps.guard.outputs.run_backup == 'true'
+        id: conn
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SUPABASE_POOLER_HOST:?Missing SUPABASE_POOLER_HOST}"
+          : "${SUPABASE_DB:?Missing SUPABASE_DB}"
+          : "${SUPABASE_USER:?Missing SUPABASE_USER}"
+          : "${SUPABASE_PASSWORD:?Missing SUPABASE_PASSWORD}"
+          PORT="${SUPABASE_POOLER_PORT:-6543}"  # default to transaction pooler
+
+          CONNSTR="postgresql://${SUPABASE_USER}:${SUPABASE_PASSWORD}@${SUPABASE_POOLER_HOST}:${PORT}/${SUPABASE_DB}"
+          echo "::add-mask::$CONNSTR"
+          echo "CONNSTR=$CONNSTR" >> "$GITHUB_OUTPUT"
+          echo "HOST=${SUPABASE_POOLER_HOST}" >> "$GITHUB_OUTPUT"
+          echo "PORT=${PORT}" >> "$GITHUB_OUTPUT"
+          echo "USER=${SUPABASE_USER}" >> "$GITHUB_OUTPUT"
+
+      - name: Create dated backup folder
+        if: steps.guard.outputs.run_backup == 'true'
+        id: prep
+        shell: bash
+        run: |
+          DATESTAMP="$(TZ=America/Toronto date +'%Y-%m-%d')"
+          OUTDIR="${BACKUP_DIR}/${DATESTAMP}"
+          mkdir -p "$OUTDIR"
+          echo "DATESTAMP=$DATESTAMP" >> "$GITHUB_OUTPUT"
+          echo "OUTDIR=$OUTDIR" >> "$GITHUB_OUTPUT"
+
+      - name: Dump SCHEMA (schema.sql)
+        if: steps.guard.outputs.run_backup == 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.CONNSTR }}
+        run: |
+          set -euo pipefail
+          pg_dump --schema-only --no-owner --no-privileges \
+            "$DATABASE_URL" > "${{ steps.prep.outputs.OUTDIR }}/schema.sql"
+
+      - name: Dump DATA (data.sql)
+        if: steps.guard.outputs.run_backup == 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.CONNSTR }}
+        run: |
+          set -euo pipefail
+          pg_dump --data-only --no-owner --no-privileges \
+            "$DATABASE_URL" > "${{ steps.prep.outputs.OUTDIR }}/data.sql"
+
+      - name: Dump ROLES (roles.sql) — best effort
+        if: steps.guard.outputs.run_backup == 'true'
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Note: Roles dump may require elevated privileges; don't fail the job if it errors.
+          pg_dumpall --roles-only \
+            -h "${{ steps.conn.outputs.HOST }}" \
+            -p "${{ steps.conn.outputs.PORT }}" \
+            -U "${{ steps.conn.outputs.USER }}" \
+            > "${{ steps.prep.outputs.OUTDIR }}/roles.sql" || {
+              echo "roles.sql dump failed (likely permissions). Continuing..."
+              rm -f "${{ steps.prep.outputs.OUTDIR }}/roles.sql" || true
+            }
+
+      - name: List backup files
+        if: steps.guard.outputs.run_backup == 'true'
+        run: ls -lh "${{ steps.prep.outputs.OUTDIR }}"
+
+      - name: Commit backups to repo
+        if: steps.guard.outputs.run_backup == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: Supabase backup
+          commit_message: "Supabase backup @ ${{ steps.prep.outputs.DATESTAMP }}"
+          file_pattern: ${{ steps.prep.outputs.OUTDIR }}/*
