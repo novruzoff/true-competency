@@ -1,29 +1,53 @@
 name: Daily Backup
 on:
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC every day
-  workflow_dispatch: {} # allows manual run
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch: {} # allow manual runs
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Postgres client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
-      - name: Dump Supabase DB
-        env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Install Postgres client + tools
         run: |
-          TIMESTAMP=$(date -u +'%Y-%m-%d_%H-%M')
-          pg_dump --no-owner --no-privileges \
-            --dbname="$DB_URL" \
-            --file=backup_$TIMESTAMP.sql
-          ls -lh backup_$TIMESTAMP.sql
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client dnsutils
 
-      - name: Upload artifact
+      - name: Resolve Supabase host to IPv4
+        id: dns
+        env:
+          HOST: ${{ secrets.SUPABASE_DB_HOST }}
+        run: |
+          # Get first IPv4 (A record). Fallback to host if resolution fails.
+          IPV4=$(dig +short A "$HOST" | head -n1)
+          if [ -z "$IPV4" ]; then
+            echo "No IPv4 found for $HOST; using hostname (may fail if IPv6 only)"
+            echo "ip_or_host=$HOST" >> "$GITHUB_OUTPUT"
+          else
+            echo "Resolved $HOST -> $IPV4"
+            echo "ip_or_host=$IPV4" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dump Supabase DB (IPv4 forced)
+        env:
+          PGHOST: ${{ steps.dns.outputs.ip_or_host }}
+          PGPORT: 5432
+          PGDATABASE: ${{ secrets.SUPABASE_DB_NAME }}
+          PGUSER: ${{ secrets.SUPABASE_DB_USER }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          TS=$(date -u +'%Y-%m-%d_%H-%M')
+          # sslmode=require tells libpq to use TLS (Supabase requires it)
+          pg_dump \
+            --no-owner --no-privileges \
+            --format=custom \
+            --file="backup_${TS}.dump" \
+            "host=${PGHOST} port=${PGPORT} dbname=${PGDATABASE} user=${PGUSER} sslmode=require"
+          ls -lh "backup_${TS}.dump"
+
+      - name: Upload artifact (30 days)
         uses: actions/upload-artifact@v4
         with:
           name: supabase-backup
-          path: backup_*.sql
+          path: backup_*.dump
           retention-days: 30
