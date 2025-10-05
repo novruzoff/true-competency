@@ -1,21 +1,16 @@
 name: Supa-backup
 
 on:
-  # Run manually (with optional force to bypass the 3am guard)
   workflow_dispatch:
     inputs:
       force:
         description: "Run backup even if it's not 3:00 AM Toronto"
         required: false
         default: "false"
-
-  # Optional: fire on pushes/PRs (keep or remove to taste)
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-
-  # 3:00 AM America/Toronto across DST (EDT=07:00 UTC, EST=08:00 UTC)
   schedule:
     - cron: "0 7 * * *"
     - cron: "0 8 * * *"
@@ -27,25 +22,17 @@ jobs:
       contents: write
 
     env:
-      # --- REQUIRED repo secrets (Settings → Secrets and variables → Actions) ---
-      # SUPABASE_POOLER_HOST (e.g. aws-1-us-east-2.pooler.supabase.com)
-      # SUPABASE_POOLER_PORT (e.g. 6543 for transaction pooler, or 5432 for session)
-      # SUPABASE_DB  (usually "postgres")
-      # SUPABASE_USER (usually "postgres")
-      # SUPABASE_PASSWORD
+      # From your repo secrets
       SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
       SUPABASE_POOLER_PORT: ${{ secrets.SUPABASE_POOLER_PORT }}
-      SUPABASE_DB: ${{ secrets.SUPABASE_DB }}
-      SUPABASE_USER: ${{ secrets.SUPABASE_USER }}
-      SUPABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
-
-      # Where backups are stored in the repo
+      SUPABASE_DB: ${{ secrets.SUPABASE_DB_NAME }}
+      SUPABASE_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       BACKUP_DIR: backups
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        # no ref override → works for push/PR/manual
 
       - name: Install PostgreSQL client
         run: |
@@ -69,7 +56,7 @@ jobs:
             echo "run_backup=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build connection string (IPv4 via Supabase pooler)
+      - name: Build connection string (IPv4 pooler)
         if: steps.guard.outputs.run_backup == 'true'
         id: conn
         shell: bash
@@ -79,8 +66,7 @@ jobs:
           : "${SUPABASE_DB:?Missing SUPABASE_DB}"
           : "${SUPABASE_USER:?Missing SUPABASE_USER}"
           : "${SUPABASE_PASSWORD:?Missing SUPABASE_PASSWORD}"
-          PORT="${SUPABASE_POOLER_PORT:-6543}"  # default to transaction pooler
-
+          PORT="${SUPABASE_POOLER_PORT:-6543}"
           CONNSTR="postgresql://${SUPABASE_USER}:${SUPABASE_PASSWORD}@${SUPABASE_POOLER_HOST}:${PORT}/${SUPABASE_DB}"
           echo "::add-mask::$CONNSTR"
           echo "CONNSTR=$CONNSTR" >> "$GITHUB_OUTPUT"
@@ -104,7 +90,6 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.conn.outputs.CONNSTR }}
         run: |
-          set -euo pipefail
           pg_dump --schema-only --no-owner --no-privileges \
             "$DATABASE_URL" > "${{ steps.prep.outputs.OUTDIR }}/schema.sql"
 
@@ -113,17 +98,14 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.conn.outputs.CONNSTR }}
         run: |
-          set -euo pipefail
           pg_dump --data-only --no-owner --no-privileges \
             "$DATABASE_URL" > "${{ steps.prep.outputs.OUTDIR }}/data.sql"
 
       - name: Dump ROLES (roles.sql) — best effort
         if: steps.guard.outputs.run_backup == 'true'
         env:
-          PGPASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          set -euo pipefail
-          # Note: Roles dump may require elevated privileges; don't fail the job if it errors.
           pg_dumpall --roles-only \
             -h "${{ steps.conn.outputs.HOST }}" \
             -p "${{ steps.conn.outputs.PORT }}" \
@@ -132,10 +114,6 @@ jobs:
               echo "roles.sql dump failed (likely permissions). Continuing..."
               rm -f "${{ steps.prep.outputs.OUTDIR }}/roles.sql" || true
             }
-
-      - name: List backup files
-        if: steps.guard.outputs.run_backup == 'true'
-        run: ls -lh "${{ steps.prep.outputs.OUTDIR }}"
 
       - name: Commit backups to repo
         if: steps.guard.outputs.run_backup == 'true'
