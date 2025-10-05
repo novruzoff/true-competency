@@ -12,8 +12,8 @@ on:
   pull_request:
     branches: [main, develop]
   schedule:
-    - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
+    - cron: "0 7 * * *" # 3 AM Toronto during EDT
+    - cron: "0 8 * * *" # 3 AM Toronto during EST
 
 jobs:
   run_db_backup:
@@ -22,7 +22,7 @@ jobs:
       contents: write
 
     env:
-      # From your repo secrets
+      # --- REQUIRED secrets from the repo ---
       SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
       SUPABASE_POOLER_PORT: ${{ secrets.SUPABASE_POOLER_PORT }}
       SUPABASE_DB: ${{ secrets.SUPABASE_DB_NAME }}
@@ -40,6 +40,9 @@ jobs:
           wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
           sudo apt-get update -y
           sudo apt-get install -y postgresql-client-17
+          # Ensure pg_dump points to v17
+          sudo ln -sf /usr/lib/postgresql/17/bin/pg_dump /usr/bin/pg_dump
+          sudo ln -sf /usr/lib/postgresql/17/bin/pg_restore /usr/bin/pg_restore
 
       - name: Only run at 3:00 AM Toronto unless forced
         id: guard
@@ -116,6 +119,10 @@ jobs:
               echo "roles.sql dump failed (likely permissions). Continuing..."
               rm -f "${{ steps.prep.outputs.OUTDIR }}/roles.sql" || true
             }
+
+      - name: List backup files
+        if: steps.guard.outputs.run_backup == 'true'
+        run: ls -lh "${{ steps.prep.outputs.OUTDIR }}"
 
       - name: Commit backups to repo
         if: steps.guard.outputs.run_backup == 'true'
