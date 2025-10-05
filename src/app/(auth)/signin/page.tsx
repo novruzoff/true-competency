@@ -4,7 +4,52 @@ import { useState } from "react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 
-type Role = "resident" | "attending" | "committee";
+/** UI roles shown on the cards */
+type UIRole = "resident" | "attending" | "committee";
+/** DB enum values in profiles.role */
+type DBRole = "trainee" | "instructor" | "committee";
+
+/** Map UI role names to DB enum */
+function mapRole(r: UIRole): DBRole {
+  if (r === "resident") return "trainee";
+  if (r === "attending") return "instructor";
+  return "committee";
+}
+
+/** Ensure a profiles row exists; if not, create it with provided role */
+async function ensureProfile({
+  id,
+  email,
+  role,
+}: {
+  id: string;
+  email: string | null;
+  role: DBRole; // what we want to set if missing
+}) {
+  // Check first to avoid unnecessary writes
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", id)
+    .single();
+
+  if (!existing) {
+    // create row
+    await supabase.from("profiles").upsert(
+      {
+        id,
+        email: email ?? "",
+        role,
+      },
+      { onConflict: "id" }
+    );
+  }
+}
+
+/** Update role on an existing profile (no-op if already the same) */
+async function setProfileRole(userId: string, role: DBRole) {
+  await supabase.from("profiles").update({ role }).eq("id", userId);
+}
 
 function RoleCard({
   title,
@@ -50,40 +95,56 @@ function RoleCard({
 
 export default function SignInPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [role, setRole] = useState<Role>("resident");
+  const [role, setRole] = useState<UIRole>("resident");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function upsertRole(userId: string, r: Role) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role: r })
-      .eq("id", userId);
-    if (error) throw error;
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
     setLoading(true);
+
     try {
       if (mode === "signup") {
+        // 1) create auth user
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
+
+        // 2) if user object returned (email confirmations can vary), ensure profile with chosen role
         if (data.user) {
-          await upsertRole(data.user.id, role);
-          setMsg("Account created. You can now sign in.");
-          setMode("signin");
+          await ensureProfile({
+            id: data.user.id,
+            email: data.user.email ?? email,
+            role: mapRole(role),
+          });
+
+          // optional: make sure role matches the chosen one even if a trigger set a default
+          await setProfileRole(data.user.id, mapRole(role));
         }
+
+        setMsg("Account created. You can now sign in.");
+        setMode("signin");
       } else {
+        // Sign in
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        if (data.user) window.location.href = "/";
+
+        if (data.user) {
+          // Safety net: if somehow no profile exists, create with default 'trainee'
+          await ensureProfile({
+            id: data.user.id,
+            email: data.user.email ?? email,
+            role: "trainee",
+          });
+
+          // Redirect to app root; your root page will route by role
+          window.location.href = "/";
+        }
       }
     } catch (err: unknown) {
       setMsg(err instanceof Error ? err.message : "Something went wrong");
@@ -95,7 +156,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-[100dvh] bg-gradient-to-b from-[#EEF4FF] to-white">
       <div className="mx-auto max-w-3xl px-4 py-12">
-        {/* Brand header with your REAL logo */}
+        {/* Brand header */}
         <div className="mx-auto mb-4 flex flex-col items-center">
           <Image
             src="/TC_Logo.png"
