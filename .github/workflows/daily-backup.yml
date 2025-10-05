@@ -1,28 +1,52 @@
 name: Daily Backup
 on:
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC daily
-  workflow_dispatch: {} # allow manual runs
+    - cron: "0 3 * * *" # Runs daily at 03:00 UTC
+  workflow_dispatch: {} # Allows manual trigger from the Actions tab
 
 jobs:
   backup:
     runs-on: ubuntu-latest
+
     steps:
       - name: Install Postgres client + DNS tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client dnsutils
+          sudo apt-get install -y postgresql-client dnsutils inetutils-tools
 
-      - name: Resolve Supabase host to IPv4
+      - name: Resolve Supabase host to IPv4 (robust)
         id: dns
         env:
-          HOST: ${{ secrets.SUPABASE_DB_HOST }} # e.g. db.stkwpilbzvzmgrxbsvcx.supabase.co
+          HOST: ${{ secrets.SUPABASE_DB_HOST }} # e.g. db.xxxxxx.supabase.co
         run: |
-          IPV4=$(dig +short A "$HOST" | head -n1)
+          set -e
+          echo "Resolving IPv4 for $HOST ..."
+
+          IPV4=""
+          # Try glibc resolver
+          IPV4=$(getent ahostsv4 "$HOST" | awk '{print $1; exit}' || true)
+
+          # Fallback: Cloudflare DNS
           if [ -z "$IPV4" ]; then
-            echo "IPv4 not found for $HOST"
+            IPV4=$(dig +short A "$HOST" @1.1.1.1 | head -n1 || true)
+          fi
+
+          # Fallback: Google DNS
+          if [ -z "$IPV4" ]; then
+            IPV4=$(nslookup -type=A "$HOST" 8.8.8.8 | awk '/Address: /{print $2}' | tail -n1 || true)
+          fi
+
+          # Fallback: system nslookup (generic)
+          if [ -z "$IPV4" ]; then
+            IPV4=$(nslookup "$HOST" | awk '/^Address: /{print $2}' | grep -E '^[0-9]+\.' | head -n1 || true)
+          fi
+
+          if [ -z "$IPV4" ]; then
+            echo "❌ Could not resolve an IPv4 for $HOST"
             exit 1
           fi
+
+          echo "✅ Resolved $HOST -> $IPV4"
           echo "ip=$IPV4" >> "$GITHUB_OUTPUT"
 
       - name: Dump Supabase DB via IPv4 (hostaddr)
@@ -36,17 +60,19 @@ jobs:
         run: |
           TS=$(date -u +'%Y-%m-%d_%H-%M')
 
-          # Use libpq conninfo with BOTH host (for TLS/SNI) and hostaddr (forces IPv4)
+          # use both host and hostaddr (IPv4) for TLS and network reliability
           CONNINFO="host=${PGHOSTNAME} hostaddr=${PGHOSTADDR} port=${PGPORT} dbname=${PGDATABASE} user=${PGUSER} sslmode=require"
 
+          echo "Starting pg_dump..."
           pg_dump --no-owner --no-privileges \
             --format=custom \
             --file="backup_${TS}.dump" \
             "$CONNINFO"
 
+          echo "✅ Dump complete:"
           ls -lh "backup_${TS}.dump"
 
-      - name: Upload artifact (30 days)
+      - name: Upload artifact (30 days retention)
         uses: actions/upload-artifact@v4
         with:
           name: supabase-backup
