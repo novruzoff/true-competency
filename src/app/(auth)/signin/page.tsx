@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 type Role = "trainee" | "instructor" | "committee";
 
-// Let auth-helpers infer the client type (avoids TS mismatch)
+// Cookie-backed Supabase client (no manual typing to avoid TS mismatch)
 const supabase = createClientComponentClient();
 
 /** Ensure a profiles row exists; if not, create it */
@@ -89,8 +89,18 @@ function RoleCard({
 
 export default function SignInPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const redirect = params.get("redirect") || "/";
+
+  // Read ?redirect=... only on client to avoid SSR suspense requirement
+  const [redirect, setRedirect] = useState<string>("/");
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const r = sp.get("redirect");
+      if (r && typeof r === "string") setRedirect(r);
+    } catch {
+      /* noop */
+    }
+  }, []);
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [role, setRole] = useState<Role>("trainee");
@@ -128,13 +138,14 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
+          // Safety net: ensure a profile exists (defaults to trainee)
           await ensureProfile({
             id: data.user.id,
             email: data.user.email ?? email,
             role: "trainee",
           });
 
-          router.replace(redirect);
+          router.replace(redirect || "/");
           return;
         }
       }
