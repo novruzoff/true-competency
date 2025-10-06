@@ -12,8 +12,8 @@ type DiagRow = {
 
 type Profile = {
   id: string;
-  display_name: string | null;
-  role: "student" | "doctor";
+  email: string | null;
+  role: "trainee" | "instructor" | "committee";
 };
 
 const T = {
@@ -84,11 +84,10 @@ export default function DebugPage() {
         });
       }
 
-      // 3) Current profile
       if (userRes?.user?.id) {
         const { data: prof, error: profErr } = await supabase
           .from("profiles")
-          .select("id, display_name, role")
+          .select("id, email, role")
           .eq("id", userRes.user.id)
           .single<Profile>();
 
@@ -102,7 +101,7 @@ export default function DebugPage() {
           add({
             name: "profiles (current user)",
             status: "ok",
-            detail: `${prof.display_name ?? "(no name)"} • ${prof.role}`,
+            detail: `${prof.email ?? "(no email)"} • ${prof.role}`,
             extra: prof,
           });
         }
