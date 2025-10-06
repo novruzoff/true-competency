@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-// --- Minimal client in-file so this works standalone ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+// Use auth-helpers so getUser() reads cookie-backed session
+const supabase = createClientComponentClient();
 
 // --- Roles & profile typing ---
 type UserRole = "trainee" | "instructor" | "committee";
@@ -83,7 +81,6 @@ export default function Page() {
           return;
         }
 
-        // unknown role fallback
         if (!cancelled) {
           setGateErr(`Unknown role: ${String((prof as Profile).role)}`);
           setChecking(false);
@@ -479,13 +476,11 @@ function CommitteeCatalog({ initialEmail }: { initialEmail: string | null }) {
             Prev
           </button>
           <span className="text-sm text-neutral-400">
-            Page {page} / {Math.max(1, Math.ceil(total / pageSize))}
+            Page {page} / {totalPages}
           </span>
           <button
             onClick={() => setPage((p) => p + 1)}
-            disabled={
-              page >= Math.max(1, Math.ceil(total / pageSize)) || loading
-            }
+            disabled={page >= totalPages || loading}
             className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm disabled:opacity-50"
           >
             Next
