@@ -1,29 +1,132 @@
-name: Daily Backup
+name: Supa-backup
+
 on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run backup even if it's not 3:00 AM Toronto"
+        required: false
+        default: "false"
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC every day
-  workflow_dispatch: {} # allows manual run
+    - cron: "0 7 * * *" # 3 AM Toronto during EDT
+    - cron: "0 8 * * *" # 3 AM Toronto during EST
 
 jobs:
-  backup:
+  run_db_backup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      # --- REQUIRED secrets from the repo ---
+      SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
+      SUPABASE_POOLER_PORT: ${{ secrets.SUPABASE_POOLER_PORT }}
+      SUPABASE_DB: ${{ secrets.SUPABASE_DB_NAME }}
+      SUPABASE_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BACKUP_DIR: backups
+
     steps:
-      - name: Install Postgres client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Dump Supabase DB
-        env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Install PostgreSQL 17 client
         run: |
-          TIMESTAMP=$(date -u +'%Y-%m-%d_%H-%M')
-          pg_dump --no-owner --no-privileges \
-            --dbname="$DB_URL" \
-            --file=backup_$TIMESTAMP.sql
-          ls -lh backup_$TIMESTAMP.sql
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client-17
+          # Ensure pg_dump points to v17
+          sudo ln -sf /usr/lib/postgresql/17/bin/pg_dump /usr/bin/pg_dump
+          sudo ln -sf /usr/lib/postgresql/17/bin/pg_restore /usr/bin/pg_restore
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Only run at 3:00 AM Toronto unless forced
+        id: guard
+        shell: bash
+        run: |
+          FORCE="${{ github.event.inputs.force }}"
+          HOUR_TORONTO=$(TZ=America/Toronto date +%H)
+          if [ "$FORCE" = "true" ] || [ "$FORCE" = "True" ] || [ "$FORCE" = "1" ]; then
+            echo "Forced run requested. Proceeding."
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR_TORONTO" = "03" ]; then
+            echo "It's 3am in America/Toronto. Proceeding."
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not 3am in America/Toronto (it's ${HOUR_TORONTO}:00). Skipping."
+            echo "run_backup=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build connection string (IPv4 pooler)
+        if: steps.guard.outputs.run_backup == 'true'
+        id: conn
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SUPABASE_POOLER_HOST:?Missing SUPABASE_POOLER_HOST}"
+          : "${SUPABASE_DB:?Missing SUPABASE_DB}"
+          : "${SUPABASE_USER:?Missing SUPABASE_USER}"
+          : "${SUPABASE_PASSWORD:?Missing SUPABASE_PASSWORD}"
+          PORT="${SUPABASE_POOLER_PORT:-6543}"
+          CONNSTR="postgresql://${SUPABASE_USER}:${SUPABASE_PASSWORD}@${SUPABASE_POOLER_HOST}:${PORT}/${SUPABASE_DB}"
+          echo "::add-mask::$CONNSTR"
+          echo "CONNSTR=$CONNSTR" >> "$GITHUB_OUTPUT"
+          echo "HOST=${SUPABASE_POOLER_HOST}" >> "$GITHUB_OUTPUT"
+          echo "PORT=${PORT}" >> "$GITHUB_OUTPUT"
+          echo "USER=${SUPABASE_USER}" >> "$GITHUB_OUTPUT"
+
+      - name: Create dated backup folder
+        if: steps.guard.outputs.run_backup == 'true'
+        id: prep
+        shell: bash
+        run: |
+          DATESTAMP="$(TZ=America/Toronto date +'%Y-%m-%d')"
+          OUTDIR="${BACKUP_DIR}/${DATESTAMP}"
+          mkdir -p "$OUTDIR"
+          echo "DATESTAMP=$DATESTAMP" >> "$GITHUB_OUTPUT"
+          echo "OUTDIR=$OUTDIR" >> "$GITHUB_OUTPUT"
+
+      - name: Dump SCHEMA (schema.sql)
+        if: steps.guard.outputs.run_backup == 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.CONNSTR }}
+        run: |
+          pg_dump --schema-only --no-owner --no-privileges \
+            "$DATABASE_URL" > "${{ steps.prep.outputs.OUTDIR }}/schema.sql"
+
+      - name: Dump DATA (data.sql)
+        if: steps.guard.outputs.run_backup == 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.CONNSTR }}
+        run: |
+          pg_dump --data-only --no-owner --no-privileges \
+            "$DATABASE_URL" > "${{ steps.prep.outputs.OUTDIR }}/data.sql"
+
+      - name: Dump ROLES (roles.sql) — best effort
+        if: steps.guard.outputs.run_backup == 'true'
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          pg_dumpall --roles-only \
+            -h "${{ steps.conn.outputs.HOST }}" \
+            -p "${{ steps.conn.outputs.PORT }}" \
+            -U "${{ steps.conn.outputs.USER }}" \
+            > "${{ steps.prep.outputs.OUTDIR }}/roles.sql" || {
+              echo "roles.sql dump failed (likely permissions). Continuing..."
+              rm -f "${{ steps.prep.outputs.OUTDIR }}/roles.sql" || true
+            }
+
+      - name: List backup files
+        if: steps.guard.outputs.run_backup == 'true'
+        run: ls -lh "${{ steps.prep.outputs.OUTDIR }}"
+
+      - name: Commit backups to repo
+        if: steps.guard.outputs.run_backup == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          name: supabase-backup
-          path: backup_*.sql
-          retention-days: 30
+          commit_message: "Supabase backup @ ${{ steps.prep.outputs.DATESTAMP }}"
+          file_pattern: ${{ steps.prep.outputs.OUTDIR }}/*
