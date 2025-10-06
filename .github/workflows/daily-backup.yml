@@ -1,19 +1,15 @@
 name: Supa-backup
 
 on:
+  schedule:
+    - cron: "0 7 * * *" # 3am Toronto during EDT
+    - cron: "0 8 * * *" # 3am Toronto during EST
   workflow_dispatch:
     inputs:
       force:
-        description: "Run backup even if it's not 3:00 AM Toronto"
+        description: "Run backup now"
         required: false
         default: "false"
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  schedule:
-    - cron: "0 7 * * *" # 3 AM Toronto during EDT
-    - cron: "0 8 * * *" # 3 AM Toronto during EST
 
 jobs:
   run_db_backup:
