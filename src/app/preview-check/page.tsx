@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 
 type Health = { ok: boolean; time: string };
@@ -12,14 +13,19 @@ export default function PreviewCheck() {
   useEffect(() => {
     (async () => {
       try {
-        const [h, r] = await Promise.all([
-          fetch("/api/health").then((r) => r.json()),
-          fetch("/api/runtime").then((r) => r.json()),
+        const [hRes, rRes] = await Promise.all([
+          fetch("/api/health"),
+          fetch("/api/runtime"),
         ]);
+
+        const h = (await hRes.json()) as Health;
+        const r = (await rRes.json()) as Runtime;
+
         setHealth(h);
         setRuntime(r);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to fetch diagnostics");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setErr(msg);
       }
     })();
   }, []);
