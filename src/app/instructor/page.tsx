@@ -119,7 +119,7 @@ export default function DoctorDashboard() {
           }}
         >
           <h1 style={{ fontSize: 18, fontWeight: 600 }}>
-            True Competency — Doctor
+            True Competency — Instructor
           </h1>
           <div style={{ fontSize: 13, color: T.MUTED }}>
             {email ?? "Not signed in"}

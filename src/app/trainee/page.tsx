@@ -187,7 +187,7 @@ export default function StudentDashboard() {
             </div>
             <div>
               <h1 style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.2 }}>
-                True Competency — Student
+                True Competency — Trainee
               </h1>
               <p style={{ fontSize: 12, color: THEME.MUTED }}>
                 Your assigned topics & progress
