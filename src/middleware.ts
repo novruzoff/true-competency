@@ -11,7 +11,11 @@ export async function middleware(req: NextRequest) {
   const PUBLIC_PATHS = [
     '/signin',
     '/signup',
-    '/debug',                // <-- allow the diagnostics page
+    '/debug',              // <-- allow the diagnostics page
+    '/api/auth/callback',
+    '/preview-check',
+    '/api/health',
+    '/api/runtime',
     '/api/auth/callback',
     '/favicon.ico',
   ];
