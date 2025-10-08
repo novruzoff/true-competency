@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
 
 const THEME = {
   CANVAS: "#0b0c0f",
@@ -348,8 +349,8 @@ export default function StudentDashboard() {
                     justifyContent: "flex-end",
                   }}
                 >
-                  <a
-                    href={`/student/competency/${r.competency_id}`}
+                  <Link
+                    href={`/trainee/competency/${r.competency_id}`}
                     style={{
                       fontSize: 13,
                       color: THEME.TEXT,
@@ -359,7 +360,7 @@ export default function StudentDashboard() {
                     }}
                   >
                     Continue →
-                  </a>
+                  </Link>
                 </div>
               </article>
             );
