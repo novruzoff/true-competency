@@ -1,11 +1,11 @@
 // src/app/trainee/competency/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-type Params = { id: string };
+/* ------------------------- Types ------------------------- */
 
 type Competency = {
   id: string;
@@ -22,40 +22,73 @@ type Question = {
   created_at: string;
 };
 
+type Option = {
+  id: string;
+  question_id: string;
+  label: string; // "A" | "B" | ...
+  body: string;
+  is_correct: boolean; // never shown to trainee
+};
+
 type Answer = {
   student_id: string;
   question_id: string;
-  is_correct: boolean;
+  is_correct: boolean | null; // MCQ -> true/false, long-answer -> null
   answered_at: string;
 };
 
-export default function TraineeCompetencyPage({ params }: { params: Params }) {
+type OptionsByQ = Record<string, Option[]>;
+
+/* --------------------- Error helper ---------------------- */
+
+function getErrorMessage(e: unknown) {
+  if (!e) return "Unknown error";
+  if (e instanceof Error) return e.message;
+  const any = e as { message?: string; details?: string; hint?: string };
+  if (any?.message)
+    return [any.message, any.details, any.hint].filter(Boolean).join(" — ");
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
+/* --------------------- Page component -------------------- */
+
+export default function TraineeCompetencyPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const competencyId = params.id;
 
-  // session
+  // session/user
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // data
   const [competency, setCompetency] = useState<Competency | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [optionsByQ, setOptionsByQ] = useState<OptionsByQ>({});
   const [answers, setAnswers] = useState<Record<string, Answer>>({}); // by question_id
 
-  // ui
+  // UI/local
+  const [choice, setChoice] = useState<Record<string, string>>({}); // qid -> optionId (MCQ)
   const [loading, setLoading] = useState(true);
   const [savingQ, setSavingQ] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // refs per question for auto-scroll after "wrong"
+  const qRefs = useRef<Record<string, HTMLElement | null>>({});
+
   // progress
   const total = questions.length;
-  const answered = useMemo(
+  const answeredCount = useMemo(
     () => Object.values(answers).filter(Boolean).length,
     [answers]
   );
-  const pct = total ? Math.round((answered / total) * 100) : 0;
+  const pct = total ? Math.round((answeredCount / total) * 100) : 0;
 
-  // load session + data
+  /* -------------------- Initial load -------------------- */
   useEffect(() => {
     let cancelled = false;
 
@@ -66,12 +99,13 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
         // session
         const { data: u, error: uerr } = await supabase.auth.getUser();
         if (uerr) throw uerr;
-        const uid = u.user?.id;
-        setUserId(uid ?? null);
+        const uid = u.user?.id ?? null;
+        setUserId(uid);
         setUserEmail(u.user?.email ?? null);
-
         if (!uid) {
-          router.replace("/signin?redirect=/trainee");
+          router.replace(
+            `/signin?redirect=/trainee/competency/${competencyId}`
+          );
           return;
         }
 
@@ -95,11 +129,33 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
           .returns<Question[]>();
         if (qerr) throw qerr;
         if (cancelled) return;
-        setQuestions(qs ?? []);
+        const list = qs ?? [];
+        setQuestions(list);
 
-        // existing answers for this user & these questions
-        if ((qs ?? []).length > 0) {
-          const ids = (qs ?? []).map((q) => q.id);
+        // options (MCQ) for all questions
+        if (list.length > 0) {
+          const ids = list.map((q) => q.id);
+          const { data: opts, error: oerr } = await supabase
+            .from("question_options")
+            .select("id, question_id, label, body, is_correct")
+            .in("question_id", ids)
+            .order("label", { ascending: true })
+            .returns<Option[]>();
+          if (oerr) throw oerr;
+
+          const byQ: OptionsByQ = {};
+          (opts ?? []).forEach((o) => {
+            if (!byQ[o.question_id]) byQ[o.question_id] = [];
+            byQ[o.question_id].push(o);
+          });
+          setOptionsByQ(byQ);
+        } else {
+          setOptionsByQ({});
+        }
+
+        // existing answers
+        if (list.length > 0 && uid) {
+          const ids = list.map((q) => q.id);
           const { data: ans, error: aerr } = await supabase
             .from("student_answers")
             .select("student_id, question_id, is_correct, answered_at")
@@ -107,7 +163,6 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
             .in("question_id", ids)
             .returns<Answer[]>();
           if (aerr) throw aerr;
-          if (cancelled) return;
 
           const byId: Record<string, Answer> = {};
           (ans ?? []).forEach((a) => (byId[a.question_id] = a));
@@ -116,9 +171,7 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
           setAnswers({});
         }
       } catch (e) {
-        if (!cancelled) {
-          setErr(e instanceof Error ? e.message : String(e));
-        }
+        if (!cancelled) setErr(getErrorMessage(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -129,42 +182,68 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
     };
   }, [competencyId, router]);
 
-  async function recordAnswer(qid: string, isCorrect: boolean) {
+  /* -------------------- Handlers -------------------- */
+
+  // Submit MCQ (selected_option_id only; trigger computes is_correct)
+  async function submitMCQ(qid: string) {
     if (!userId) return;
+    const selected = choice[qid];
+    if (!selected) {
+      setErr("Please select an option first.");
+      return;
+    }
+
     setSavingQ(qid);
     setErr(null);
     try {
-      // optimistic
-      const optimistic: Answer = {
-        student_id: userId,
-        question_id: qid,
-        is_correct: isCorrect,
-        answered_at: new Date().toISOString(),
-      };
-      setAnswers((prev) => ({ ...prev, [qid]: optimistic }));
+      // optimistic (just mark as answered locally)
+      setAnswers((prev) => ({
+        ...prev,
+        [qid]: {
+          student_id: userId,
+          question_id: qid,
+          is_correct: prev[qid]?.is_correct ?? null,
+          answered_at: new Date().toISOString(),
+        },
+      }));
 
       const { error } = await supabase.from("student_answers").upsert(
         {
           student_id: userId,
           question_id: qid,
-          is_correct: isCorrect,
+          selected_option_id: selected, // 🔐 trigger sets is_correct
           answered_at: new Date().toISOString(),
         },
         { onConflict: "student_id,question_id" }
       );
       if (error) throw error;
+
+      // re-fetch this answer to show correctness
+      const { data: refreshed, error: rerr } = await supabase
+        .from("student_answers")
+        .select("student_id, question_id, is_correct, answered_at")
+        .eq("student_id", userId)
+        .eq("question_id", qid)
+        .single<Answer>();
+      if (rerr) throw rerr;
+
+      setAnswers((prev) => ({ ...prev, [qid]: refreshed }));
+
+      // if wrong, scroll into view for quick retry
+      if (refreshed?.is_correct === false) {
+        qRefs.current[qid]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
     } catch (e) {
-      // rollback optimistic if needed
-      setAnswers((prev) => {
-        const clone = { ...prev };
-        delete clone[qid];
-        return clone;
-      });
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(getErrorMessage(e));
     } finally {
       setSavingQ(null);
     }
   }
+
+  /* -------------------- Render -------------------- */
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -221,15 +300,24 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
         ) : (
           <div className="space-y-4">
             <div className="text-sm text-neutral-400">
-              {answered}/{total} answered • {pct}%
+              {answeredCount}/{total} answered • {pct}%
             </div>
+
             {questions.map((q, idx) => {
               const a = answers[q.id];
+              const isCorrect = a?.is_correct === true;
+              const isWrong = a?.is_correct === false;
+              const opts = optionsByQ[q.id] ?? [];
+
               return (
                 <article
                   key={q.id}
+                  ref={(el) => {
+                    qRefs.current[q.id] = el;
+                  }}
                   className="rounded-xl border border-neutral-800 bg-neutral-900 p-4"
                 >
+                  {/* Header row */}
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-xs text-neutral-500">
@@ -238,40 +326,88 @@ export default function TraineeCompetencyPage({ params }: { params: Params }) {
                       <div className="mt-1 text-neutral-100">{q.body}</div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => recordAnswer(q.id, true)}
-                        disabled={savingQ === q.id}
-                        className={[
-                          "rounded-lg px-3 py-2 text-sm font-medium border",
-                          a?.is_correct
-                            ? "bg-emerald-400 text-neutral-900 border-emerald-300"
-                            : "bg-neutral-950 text-neutral-100 border-neutral-700 hover:border-neutral-500",
-                        ].join(" ")}
-                        title="I answered correctly"
-                      >
-                        Correct
-                      </button>
-                      <button
-                        onClick={() => recordAnswer(q.id, false)}
-                        disabled={savingQ === q.id}
-                        className={[
-                          "rounded-lg px-3 py-2 text-sm font-medium border",
-                          a && !a.is_correct
-                            ? "bg-yellow-300 text-neutral-900 border-yellow-200"
-                            : "bg-neutral-950 text-neutral-100 border-neutral-700 hover:border-neutral-500",
-                        ].join(" ")}
-                        title="Needs work / incorrect"
-                      >
-                        Needs work
-                      </button>
-                    </div>
+                    <span
+                      className={[
+                        "rounded-full px-2 py-1 text-[11px] font-semibold border",
+                        isCorrect
+                          ? "bg-emerald-400 text-neutral-900 border-emerald-300"
+                          : isWrong
+                          ? "bg-rose-300 text-neutral-900 border-rose-200"
+                          : "bg-neutral-950 text-neutral-100 border-neutral-700",
+                      ].join(" ")}
+                    >
+                      {isCorrect ? "Correct" : isWrong ? "Wrong" : "Unanswered"}
+                    </span>
                   </div>
 
+                  {/* Answer UI */}
+                  <div className="mt-3">
+                    {opts.length > 0 ? (
+                      // --- MCQ ---
+                      <div className="space-y-2">
+                        {opts.map((o) => (
+                          <label
+                            key={o.id}
+                            className="flex items-start gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3 hover:border-neutral-600"
+                          >
+                            <input
+                              type="radio"
+                              name={`q_${q.id}`}
+                              className="mt-1"
+                              value={o.id}
+                              disabled={isCorrect || savingQ === q.id}
+                              checked={choice[q.id] === o.id}
+                              onChange={() =>
+                                setChoice((prev) => ({ ...prev, [q.id]: o.id }))
+                              }
+                            />
+                            <div>
+                              <div className="text-xs text-neutral-400">
+                                {o.label}
+                              </div>
+                              <div className="text-sm text-neutral-100">
+                                {o.body}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => submitMCQ(q.id)}
+                            disabled={
+                              isCorrect || !choice[q.id] || savingQ === q.id
+                            }
+                            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm disabled:opacity-50 hover:border-neutral-500"
+                          >
+                            {isCorrect ? "Saved" : "Submit answer"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // --- Long-answer placeholder ---
+                      <div className="space-y-2">
+                        <textarea
+                          className="w-full min-h-24 rounded-lg border border-neutral-800 bg-neutral-900 p-3 outline-none"
+                          placeholder="Type your answer…"
+                          disabled
+                        />
+                        <div className="text-xs text-neutral-400">
+                          (Long-answer grading to be implemented)
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Timestamp/status */}
                   {a && (
                     <div className="mt-3 text-xs text-neutral-400">
                       Saved {new Date(a.answered_at).toLocaleString()} •{" "}
-                      {a.is_correct ? "Correct" : "Needs work"}
+                      {a.is_correct === null
+                        ? "Awaiting grading"
+                        : a.is_correct
+                        ? "Correct"
+                        : "Wrong"}
                     </div>
                   )}
                 </article>
