@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>True Competency — Coming Soon</title>
+  <meta name="description" content="Interventional Cardiology Training Platform for Residents, Instructors, and Committees." />
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root {
+      --bg: #050507;
+      --surface: #0b0c10;
+      --border: #15171e;
+      --text: #e7e9ee;
+      --muted: #98a2b3;
+      --accent: #4f75fc;
+      --accent2: #6ae6b2;
+      --glow: #4f75fc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 20% 30%, #0d1022 0%, var(--bg) 70%);
+      font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      animation: fadeIn 2s ease-out forwards;
+    }
+
+    .card {
+      position: relative;
+      background: linear-gradient(180deg, #0a0b10 0%, #07070a 100%);
+      border-radius: 32px;
+      padding: 3.5rem 2.5rem;
+      text-align: center;
+      border: 1px solid var(--border);
+      width: min(90%, 460px);
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background: radial-gradient(circle at center, var(--accent2)15%, transparent 60%);
+      filter: blur(120px);
+      opacity: 0.3;
+      animation: pulseBg 6s ease-in-out infinite;
+    }
+
+    .logo {
+      font-size: 2.6rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.2rem;
+      color: var(--accent2);
+      text-shadow: 0 0 10px var(--accent2), 0 0 40px var(--glow);
+      animation: rockstarGlow 5s ease-in-out infinite alternate;
+    }
+
+    h1 {
+      font-size: 1.9rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 0.8rem;
+      line-height: 1.6;
+    }
+
+    footer {
+      position: absolute;
+      bottom: 1rem;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      opacity: 0.6;
+    }
+
+    @keyframes rockstarGlow {
+      0% {
+        text-shadow:
+          0 0 6px var(--accent2),
+          0 0 15px var(--accent2),
+          0 0 30px var(--glow);
+        transform: scale(1);
+      }
+      100% {
+        text-shadow:
+          0 0 12px var(--accent2),
+          0 0 35px var(--glow),
+          0 0 60px var(--glow);
+        transform: scale(1.03);
+      }
+    }
+
+    @keyframes pulseBg {
+      0%, 100% { opacity: 0.25; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.1); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">TC</div>
+    <h1>True Competency</h1>
+    <p>
+      Interventional Cardiology Training Platform<br />
+      A new standard in medical education — launching soon.
+    </p>
+  </div>
+  <footer>© 2025 True Competency</footer>
+</body>
+</html>
