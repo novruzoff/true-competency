@@ -115,7 +115,7 @@ function ComingSoon({
             {checking ? "Checking session…" : "Sign In"}
           </a>
           <a
-            href="mailto:hello@truecompetency.com"
+            href="mailto:novruzoff@truecompetency.com"
             className="rounded-xl border border-white/20 px-6 py-3 font-semibold text-white/90 hover:border-white/40 transition"
           >
             Contact Us
@@ -127,7 +127,7 @@ function ComingSoon({
       <footer className="z-10 border-t border-white/10 bg-black/20 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-white/50 flex items-center justify-between">
           <span>© {new Date().getFullYear()} True Competency</span>
-          <span className="text-white/60">Made with ⚡️ discipline</span>
+          <span className="text-white/60">Made with love</span>
         </div>
       </footer>
 
