@@ -1,26 +1,109 @@
 @import "tailwindcss";
 
+/* Fonts are already applied in layout via next/font (Inter/Manrope) */
+
+/* -----------------------------
+   CSS Variables (Light default)
+------------------------------*/
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0a0a0a;
+  --accent: #5170ff;
+  --border: #e5e7eb;
+  --ok: #22c55e; /* keep your greens/reds for statuses */
+  --err: #ef4444;
 }
 
+/* Add to globals.css (after your existing :root) */
+:root {
+  --surface: #ffffff; /* cards/sheets in light */
+  --field: #ffffff; /* inputs in light */
+  --muted: #6b7280;
+}
+
+/* Class-based dark theme override (applies when <html class="dark">) */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --border: #1f232a;
+  --surface: #0f1116; /* card bg in dark */
+  --field: #141820; /* input bg in dark */
+  --muted: #9aa0a6;
+}
+
+/* -----------------------------
+   Dark theme (via .dark class)
+------------------------------*/
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --accent: #5170ff; /* same accent */
+  --border: #1f232a;
+  --ok: #22c55e;
+  --err: #ef4444;
+}
+
+/* Bridge vars into Tailwind inline theme tokens */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-ok: var(--ok);
+  --color-err: var(--err);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base */
+html,
 body {
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  transition: background-color 0.2s ease, color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+/* Utilities */
+.border-default {
+  border: 1px solid var(--border);
+}
+.text-accent {
+  color: var(--accent);
+}
+.bg-accent {
+  background-color: var(--accent);
+}
+.bg-ok {
+  background-color: var(--ok);
+}
+.bg-err {
+  background-color: var(--err);
+}
+
+/* Button helper to guarantee white label on primary */
+.btn-primary,
+.btn-primary * {
+  color: #fff !important;
+}
+
+/* Card */
+.card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* Optional: focus ring consistent with accent */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent);
+  border-radius: 8px;
 }

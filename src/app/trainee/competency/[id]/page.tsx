@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 /* ------------------------- Types ------------------------- */
-
 type Competency = {
   id: string;
   name: string;
@@ -39,7 +38,17 @@ type Answer = {
 
 type OptionsByQ = Record<string, Option[]>;
 
-/* --------------------- Error helper ---------------------- */
+/* --------------------- Utils ---------------------- */
+const ACCENT = "var(--accent)";
+const FG = "var(--foreground)";
+const BG = "var(--background)";
+const BORDER = "var(--border)";
+
+// softer/muted text via color-mix so it adapts to light/dark automatically
+const muted = (ratio = 55) =>
+  `color-mix(in srgb, var(--foreground) ${
+    100 - ratio
+  }%, transparent ${ratio}%)`;
 
 function getErrorMessage(e: unknown) {
   if (!e) return "Unknown error";
@@ -54,8 +63,7 @@ function getErrorMessage(e: unknown) {
   }
 }
 
-/* --------------------- Page component -------------------- */
-
+/* --------------------- Page ---------------------- */
 export default function TraineeCompetencyPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -72,7 +80,7 @@ export default function TraineeCompetencyPage() {
   const [answers, setAnswers] = useState<Record<string, Answer>>({}); // by question_id
 
   // UI/local
-  const [choice, setChoice] = useState<Record<string, string>>({}); // qid -> optionId (MCQ)
+  const [choice, setChoice] = useState<Record<string, string>>({}); // qid -> optionId
   const [loading, setLoading] = useState(true);
   const [savingQ, setSavingQ] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -96,7 +104,6 @@ export default function TraineeCompetencyPage() {
       setLoading(true);
       setErr(null);
       try {
-        // session
         const { data: u, error: uerr } = await supabase.auth.getUser();
         if (uerr) throw uerr;
         const uid = u.user?.id ?? null;
@@ -171,7 +178,7 @@ export default function TraineeCompetencyPage() {
           setAnswers({});
         }
       } catch (e) {
-        if (!cancelled) setErr(getErrorMessage(e));
+        setErr(getErrorMessage(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -183,7 +190,6 @@ export default function TraineeCompetencyPage() {
   }, [competencyId, router]);
 
   /* -------------------- Handlers -------------------- */
-
   // Submit MCQ (selected_option_id only; trigger computes is_correct)
   async function submitMCQ(qid: string) {
     if (!userId) return;
@@ -211,7 +217,7 @@ export default function TraineeCompetencyPage() {
         {
           student_id: userId,
           question_id: qid,
-          selected_option_id: selected, // 🔐 trigger sets is_correct
+          selected_option_id: selected, // trigger sets is_correct
           answered_at: new Date().toISOString(),
         },
         { onConflict: "student_id,question_id" }
@@ -244,16 +250,25 @@ export default function TraineeCompetencyPage() {
   }
 
   /* -------------------- Render -------------------- */
-
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+    <div
+      className="min-h-screen"
+      style={{
+        background: BG,
+        color: FG,
+      }}
+    >
       {/* Header */}
-      <header className="border-b border-neutral-800">
+      <header style={{ borderBottom: `1px solid ${BORDER}` }}>
         <div className="mx-auto max-w-5xl px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push("/trainee")}
-              className="rounded-lg border border-neutral-800 px-3 py-1.5 text-sm hover:border-neutral-600"
+              className="rounded-lg px-3 py-1.5 text-sm"
+              style={{
+                border: `1px solid ${BORDER}`,
+                background: BG,
+              }}
             >
               ← Back
             </button>
@@ -261,7 +276,11 @@ export default function TraineeCompetencyPage() {
               <h1 className="text-lg md:text-xl font-semibold tracking-tight">
                 {competency ? competency.name : "Loading…"}
               </h1>
-              <p className="text-xs text-neutral-400">
+              <p
+                className="text-xs"
+                style={{ color: muted(55) }}
+                title={userEmail ?? undefined}
+              >
                 {competency?.difficulty ?? "—"} •{" "}
                 {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
               </p>
@@ -276,8 +295,21 @@ export default function TraineeCompetencyPage() {
 
       {/* Body */}
       <main className="mx-auto max-w-5xl px-6 py-6">
+        {/* Top line: answered count */}
+        <div className="mb-4 text-sm" style={{ color: muted(45) }}>
+          {answeredCount}/{total} answered • {pct}%
+        </div>
+
         {err && (
-          <div className="mb-4 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+          <div
+            className="mb-4 rounded-xl px-4 py-3 text-sm"
+            style={{
+              border: "1px solid #f199a2",
+              background:
+                "color-mix(in srgb, var(--foreground) 4%, transparent 96%)",
+              color: "#9b1c2e",
+            }}
+          >
             {err}
           </div>
         )}
@@ -287,22 +319,22 @@ export default function TraineeCompetencyPage() {
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="h-24 rounded-xl border border-neutral-800 bg-neutral-900 animate-pulse"
+                className="h-24 rounded-xl animate-pulse"
+                style={{ border: `1px solid ${BORDER}`, background: BG }}
               />
             ))}
           </div>
         ) : questions.length === 0 ? (
-          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
-            <p className="text-sm text-neutral-300">
+          <div
+            className="rounded-xl p-5"
+            style={{ border: `1px solid ${BORDER}`, background: BG }}
+          >
+            <p className="text-sm" style={{ color: muted(40) }}>
               No questions have been added to this competency yet.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="text-sm text-neutral-400">
-              {answeredCount}/{total} answered • {pct}%
-            </div>
-
             {questions.map((q, idx) => {
               const a = answers[q.id];
               const isCorrect = a?.is_correct === true;
@@ -315,26 +347,35 @@ export default function TraineeCompetencyPage() {
                   ref={(el) => {
                     qRefs.current[q.id] = el;
                   }}
-                  className="rounded-xl border border-neutral-800 bg-neutral-900 p-4"
+                  className="rounded-xl p-4"
+                  style={{ border: `1px solid ${BORDER}`, background: BG }}
                 >
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs" style={{ color: muted(55) }}>
                         Question {idx + 1}
                       </div>
-                      <div className="mt-1 text-neutral-100">{q.body}</div>
+                      <div className="mt-1">{q.body}</div>
                     </div>
 
                     <span
-                      className={[
-                        "rounded-full px-2 py-1 text-[11px] font-semibold border",
+                      className="rounded-full px-2 py-1 text-[11px] font-semibold border"
+                      style={
                         isCorrect
-                          ? "bg-emerald-400 text-neutral-900 border-emerald-300"
+                          ? {
+                              background: "#34d399",
+                              color: "#0b0b0b",
+                              borderColor: "#34d399",
+                            }
                           : isWrong
-                          ? "bg-rose-300 text-neutral-900 border-rose-200"
-                          : "bg-neutral-950 text-neutral-100 border-neutral-700",
-                      ].join(" ")}
+                          ? {
+                              background: "#fb7185",
+                              color: "#0b0b0b",
+                              borderColor: "#fb7185",
+                            }
+                          : { borderColor: BORDER, color: muted(35) }
+                      }
                     >
                       {isCorrect ? "Correct" : isWrong ? "Wrong" : "Unanswered"}
                     </span>
@@ -348,7 +389,11 @@ export default function TraineeCompetencyPage() {
                         {opts.map((o) => (
                           <label
                             key={o.id}
-                            className="flex items-start gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3 hover:border-neutral-600"
+                            className="flex items-start gap-2 rounded-lg p-3 cursor-pointer"
+                            style={{
+                              border: `1px solid ${BORDER}`,
+                              background: "var(--background)",
+                            }}
                           >
                             <input
                               type="radio"
@@ -362,10 +407,13 @@ export default function TraineeCompetencyPage() {
                               }
                             />
                             <div>
-                              <div className="text-xs text-neutral-400">
+                              <div
+                                className="text-xs"
+                                style={{ color: muted(55) }}
+                              >
                                 {o.label}
                               </div>
-                              <div className="text-sm text-neutral-100">
+                              <div className="text-sm" style={{ color: FG }}>
                                 {o.body}
                               </div>
                             </div>
@@ -378,7 +426,15 @@ export default function TraineeCompetencyPage() {
                             disabled={
                               isCorrect || !choice[q.id] || savingQ === q.id
                             }
-                            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm disabled:opacity-50 hover:border-neutral-500"
+                            className="rounded-lg px-3 py-2 text-sm"
+                            style={{
+                              border: `1px solid ${BORDER}`,
+                              background: "var(--background)",
+                              color: choice[q.id] ? FG : muted(40),
+                              boxShadow: choice[q.id]
+                                ? "0 8px 24px rgba(81,112,255,0.18)"
+                                : "none",
+                            }}
                           >
                             {isCorrect ? "Saved" : "Submit answer"}
                           </button>
@@ -388,11 +444,16 @@ export default function TraineeCompetencyPage() {
                       // --- Long-answer placeholder ---
                       <div className="space-y-2">
                         <textarea
-                          className="w-full min-h-24 rounded-lg border border-neutral-800 bg-neutral-900 p-3 outline-none"
+                          className="w-full min-h-24 rounded-lg p-3 outline-none"
                           placeholder="Type your answer…"
                           disabled
+                          style={{
+                            border: `1px solid ${BORDER}`,
+                            background: "var(--background)",
+                            color: FG,
+                          }}
                         />
-                        <div className="text-xs text-neutral-400">
+                        <div className="text-xs" style={{ color: muted(50) }}>
                           (Long-answer grading to be implemented)
                         </div>
                       </div>
@@ -401,7 +462,7 @@ export default function TraineeCompetencyPage() {
 
                   {/* Timestamp/status */}
                   {a && (
-                    <div className="mt-3 text-xs text-neutral-400">
+                    <div className="mt-3 text-xs" style={{ color: muted(50) }}>
                       Saved {new Date(a.answered_at).toLocaleString()} •{" "}
                       {a.is_correct === null
                         ? "Awaiting grading"
@@ -425,14 +486,25 @@ export default function TraineeCompetencyPage() {
 function Progress({ pct }: { pct: number }) {
   return (
     <div>
-      <div className="text-xs text-neutral-400 mb-1">Progress</div>
-      <div className="h-2 rounded-full bg-neutral-800 overflow-hidden">
+      <div className="mb-1 text-xs" style={{ color: muted(50) }}>
+        Progress
+      </div>
+      <div
+        className="h-2 rounded-full overflow-hidden"
+        style={{ background: `color-mix(in srgb, ${ACCENT} 20%, transparent)` }}
+      >
         <div
-          className="h-2 bg-emerald-400"
-          style={{ width: `${pct}%`, transition: "width .25s ease" }}
+          className="h-2"
+          style={{
+            width: `${pct}%`,
+            transition: "width .25s ease",
+            background: "#34d399", // keep your green
+          }}
         />
       </div>
-      <div className="mt-1 text-right text-xs text-neutral-400">{pct}%</div>
+      <div className="mt-1 text-right text-xs" style={{ color: muted(50) }}>
+        {pct}%
+      </div>
     </div>
   );
 }

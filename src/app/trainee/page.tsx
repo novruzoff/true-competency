@@ -4,15 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 
-const THEME = {
-  CANVAS: "#0b0c0f",
-  SURFACE: "#121418",
-  BORDER: "#1f232a",
-  TEXT: "#e6e7ea",
-  MUTED: "#9aa0a6",
-  ACCENT: "#6ae6b2",
-};
-
 type Competency = {
   id: string;
   name?: string | null;
@@ -54,7 +45,6 @@ export default function StudentDashboard() {
       setCompetenciesVisible(null);
 
       try {
-        // Session
         const { data: userRes, error: getUserErr } =
           await supabase.auth.getUser();
         if (getUserErr) throw getUserErr;
@@ -62,16 +52,14 @@ export default function StudentDashboard() {
         setEmail(userRes.user?.email ?? null);
         if (!uid) throw new Error("Not signed in");
 
-        // Profile (only fields that exist in your DB)
         const { data: prof, error: profErr } = await supabase
           .from("profiles")
-          .select("id, role") // removed display_name (doesn't exist)
+          .select("id, role")
           .eq("id", uid)
           .single<Profile>();
         if (profErr) throw profErr;
         if (cancelled) return;
 
-        // Progress rows for this student
         const { data: progress, error: progErr } = await supabase
           .from("student_competency_progress")
           .select(
@@ -84,11 +72,10 @@ export default function StudentDashboard() {
         const progressRows: ProgressRow[] = (progress ?? []) as ProgressRow[];
         if (progressRows.length === 0) {
           setRows([]);
-          setCompetenciesVisible(true); // doesn’t matter; nothing to display
+          setCompetenciesVisible(true);
           return;
         }
 
-        // Try to fetch competencies; handle 0 rows gracefully
         const ids = Array.from(
           new Set(progressRows.map((r) => r.competency_id))
         );
@@ -97,10 +84,8 @@ export default function StudentDashboard() {
           .select("id, name, difficulty, tags, test_question, created_at")
           .in("id", ids);
 
-        // If blocked by RLS or empty table, compsErr may be null but length 0
         let compMap = new Map<string, Competency>();
         if (compsErr) {
-          // Could be RLS error; mark as not visible
           setCompetenciesVisible(false);
         } else {
           const list = (comps ?? []) as Competency[];
@@ -108,7 +93,6 @@ export default function StudentDashboard() {
           compMap = new Map(list.map((c) => [c.id, c]));
         }
 
-        // Merge with fallback when competency not visible
         const merged = progressRows.map((r) => {
           const c = compMap.get(r.competency_id);
           return {
@@ -122,7 +106,6 @@ export default function StudentDashboard() {
           };
         });
 
-        // Sort: incomplete first, then by (name || id)
         merged.sort((a, b) => {
           if (a.pct !== b.pct) return a.pct - b.pct;
           const an = a.competency.name ?? a.competency.id;
@@ -138,6 +121,7 @@ export default function StudentDashboard() {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -151,133 +135,70 @@ export default function StudentDashboard() {
   }, [rows]);
 
   return (
-    <main
-      style={{
-        backgroundColor: THEME.CANVAS,
-        color: THEME.TEXT,
-        minHeight: "100vh",
-      }}
-    >
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors">
       {/* Header */}
-      <header style={{ borderBottom: `1px solid ${THEME.BORDER}` }}>
-        <div
-          style={{
-            maxWidth: 1120,
-            margin: "0 auto",
-            padding: "16px 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
-              style={{
-                height: 36,
-                width: 36,
-                borderRadius: 12,
-                background: THEME.SURFACE,
-                border: `1px solid ${THEME.BORDER}`,
-                display: "grid",
-                placeItems: "center",
-                fontWeight: 700,
-                fontSize: 12,
-              }}
-            >
+      <header className="border-b border-[var(--border)] backdrop-blur-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[color:var(--accent)] grid place-items-center font-bold text-sm">
               TC
             </div>
             <div>
-              <h1 style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.2 }}>
-                True Competency — Trainee
+              <h1 className="text-base font-semibold leading-tight">
+                True Competency —{" "}
+                <span className="text-[color:var(--accent)]">Trainee</span>
               </h1>
-              <p style={{ fontSize: 12, color: THEME.MUTED }}>
+              <p className="text-xs text-[var(--muted)]">
                 Your assigned topics & progress
               </p>
             </div>
           </div>
-          <div style={{ fontSize: 13, color: THEME.MUTED }}>
+          <div className="text-xs text-[var(--muted)]">
             {email ?? "Not signed in"}
           </div>
         </div>
       </header>
 
       {/* Notices */}
-      <section
-        style={{ maxWidth: 1120, margin: "0 auto", padding: "12px 24px" }}
-      >
+      <section className="mx-auto max-w-5xl px-6 py-3">
         {err && (
-          <div
-            style={{
-              border: "1px solid #5c1d22",
-              background: "#2a0f13",
-              color: "#fecdd3",
-              borderRadius: 12,
-              padding: "10px 12px",
-              fontSize: 14,
-              marginBottom: 12,
-            }}
-          >
+          <div className="mb-3 rounded-xl border border-red-900/40 bg-red-950/40 px-4 py-3 text-sm text-red-200 shadow">
             {err}
           </div>
         )}
         {competenciesVisible === false && (
-          <div
-            style={{
-              border: `1px solid ${THEME.BORDER}`,
-              background: THEME.SURFACE,
-              borderRadius: 12,
-              padding: "10px 12px",
-              fontSize: 13,
-              marginBottom: 12,
-              color: THEME.MUTED,
-            }}
-          >
-            Heads-up: <b style={{ color: THEME.TEXT }}>competencies</b> returned
-            0 rows (empty or hidden by RLS). Showing progress using fallback
-            IDs.
+          <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--muted)]">
+            Heads-up: <b className="text-[var(--foreground)]">competencies</b>{" "}
+            returned 0 rows (empty or hidden by RLS).
           </div>
         )}
       </section>
 
       {/* KPIs */}
-      <section
-        style={{ maxWidth: 1120, margin: "0 auto", padding: "8px 24px 28px" }}
-      >
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            fontSize: 14,
-            color: THEME.MUTED,
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
+      <section className="mx-auto max-w-5xl px-6 pb-10">
+        <div className="mb-4 flex items-center gap-3 text-sm text-[var(--muted)]">
           <span>
             Assigned topics:{" "}
-            <span style={{ color: THEME.TEXT }}>{totalAssigned}</span>
+            <span className="text-[var(--foreground)] font-medium">
+              {totalAssigned}
+            </span>
           </span>
-          <span style={{ opacity: 0.5 }}>•</span>
+          <span className="opacity-50">•</span>
           <span>
             Average progress:{" "}
-            <span style={{ color: THEME.TEXT }}>{avgPct}%</span>
+            <span className="text-[var(--foreground)] font-medium">
+              {avgPct}%
+            </span>
           </span>
         </div>
 
-        {loading && <div style={{ color: THEME.MUTED }}>Loading…</div>}
-
+        {loading && <div className="text-[var(--muted)]">Loading…</div>}
         {!loading && rows.length === 0 && !err && (
-          <div style={{ color: THEME.MUTED }}>No assignments yet.</div>
+          <div className="text-[var(--muted)]">No assignments yet.</div>
         )}
 
         {/* Grid */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
-            gap: 12,
-          }}
-        >
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-3">
           {rows.map((r) => {
             const title =
               r.competency.name ?? `Topic ${r.competency.id.slice(0, 8)}…`;
@@ -286,78 +207,34 @@ export default function StudentDashboard() {
             return (
               <article
                 key={r.competency_id}
-                style={{
-                  background: THEME.SURFACE,
-                  border: `1px solid ${THEME.BORDER}`,
-                  borderRadius: 16,
-                  padding: 16,
-                }}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:shadow-md"
               >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <h3 style={{ fontWeight: 600, lineHeight: 1.2 }}>{title}</h3>
-                  <span
-                    style={{
-                      background: THEME.ACCENT,
-                      color: "#0a0a0a",
-                      borderRadius: 999,
-                      padding: "4px 8px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                    }}
-                  >
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold leading-tight">{title}</h3>
+                  <span className="rounded-full bg-[color:var(--accent)] px-2.5 py-1 text-[10px] font-bold text-white">
                     {diff}
                   </span>
                 </div>
 
-                <div style={{ marginTop: 8, fontSize: 12, color: THEME.MUTED }}>
+                <div className="mt-2 text-xs text-[var(--muted)]">
                   {r.answered_questions}/{r.total_questions} answered
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 8,
-                    height: 8,
-                    width: "100%",
-                    borderRadius: 999,
-                    background: "#0c0d11",
-                    outline: `1px solid ${THEME.BORDER}`,
-                    overflow: "hidden",
-                  }}
-                  title={`${r.pct}%`}
-                >
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full border border-[var(--border)] bg-[var(--field)]">
                   <div
+                    className="h-full"
                     style={{
-                      height: "100%",
                       width: `${r.pct}%`,
-                      background: THEME.ACCENT,
-                      boxShadow: `0 0 0 1px ${THEME.ACCENT}20 inset`,
+                      background: "var(--accent)",
+                      boxShadow: `0 0 0 1px var(--accent)20 inset`,
                     }}
                   />
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 12,
-                    display: "flex",
-                    justifyContent: "flex-end",
-                  }}
-                >
+                <div className="mt-3 flex justify-end">
                   <Link
                     href={`/trainee/competency/${r.competency_id}`}
-                    style={{
-                      fontSize: 13,
-                      color: THEME.TEXT,
-                      textDecoration: "underline",
-                      textUnderlineOffset: 4,
-                      opacity: 0.9,
-                    }}
+                    className="text-sm text-[var(--accent)] underline underline-offset-4 hover:opacity-80"
                   >
                     Continue →
                   </Link>
@@ -367,6 +244,10 @@ export default function StudentDashboard() {
           })}
         </div>
       </section>
+
+      <footer className="pb-10 text-center text-xs text-[var(--muted)]">
+        © {new Date().getFullYear()} True Competency. All rights reserved.
+      </footer>
     </main>
   );
 }

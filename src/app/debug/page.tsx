@@ -1,3 +1,4 @@
+// src/app/debug/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -7,7 +8,7 @@ type DiagRow = {
   name: string;
   status: "ok" | "warn" | "error";
   detail?: string;
-  extra?: unknown; // <-- allow User objects, arrays, etc.
+  extra?: unknown;
 };
 
 type Profile = {
@@ -16,15 +17,11 @@ type Profile = {
   role: "trainee" | "instructor" | "committee";
 };
 
-const T = {
-  CANVAS: "#0b0c0f",
-  SURFACE: "#121418",
-  BORDER: "#1f232a",
-  TEXT: "#e6e7ea",
-  MUTED: "#9aa0a6",
-  OK: "#6ae6b2",
-  WARN: "#facc15",
-  ERR: "#fb7185",
+const COLORS = {
+  BLUE: "#5170ff",
+  OK: "#10b981", // keep green
+  WARN: "#f59e0b", // keep amber
+  ERR: "#ef4444", // keep red
 };
 
 export default function DebugPage() {
@@ -39,7 +36,6 @@ export default function DebugPage() {
     setRunning(true);
 
     try {
-      // 1) Env vars
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -64,7 +60,6 @@ export default function DebugPage() {
         return;
       }
 
-      // 2) Auth session
       const { data: userRes, error: getUserErr } =
         await supabase.auth.getUser();
       if (getUserErr) {
@@ -80,7 +75,7 @@ export default function DebugPage() {
           detail: userRes.user
             ? `Signed in as ${userRes.user.email}`
             : "No session",
-          extra: userRes.user, // User object is fine now
+          extra: userRes.user,
         });
       }
 
@@ -107,7 +102,6 @@ export default function DebugPage() {
         }
       }
 
-      // 4) Count competencies
       {
         const { count, error } = await supabase
           .from("competencies")
@@ -132,7 +126,6 @@ export default function DebugPage() {
           });
       }
 
-      // 5) Any rows in progress view
       {
         const { data, error } = await supabase
           .from("student_competency_progress")
@@ -159,7 +152,6 @@ export default function DebugPage() {
           });
       }
 
-      // 6) Rows for current user
       if (userRes?.user?.id) {
         const { data: scp, error: scpErr } = await supabase
           .from("student_competency_progress")
@@ -191,7 +183,6 @@ export default function DebugPage() {
           });
       }
 
-      // 7) Fetch competencies by ids from progress (join sanity)
       {
         const { data: p } = await supabase
           .from("student_competency_progress")
@@ -205,7 +196,6 @@ export default function DebugPage() {
             .from("competencies")
             .select("id, name, difficulty, tags")
             .in("id", ids);
-
           if (error)
             add({
               name: "competencies (by ids from progress)",
@@ -249,45 +239,35 @@ export default function DebugPage() {
   const anyWarn = useMemo(() => rows.some((r) => r.status === "warn"), [rows]);
 
   return (
-    <main style={{ minHeight: "100vh", background: T.CANVAS, color: T.TEXT }}>
-      <header style={{ borderBottom: `1px solid ${T.BORDER}` }}>
-        <div
-          style={{
-            maxWidth: 1120,
-            margin: "0 auto",
-            padding: "16px 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <h1 style={{ fontSize: 18, fontWeight: 600 }}>
+    <main className="min-h-screen bg-white text-black">
+      {/* Header */}
+      <header className="border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between">
+          <h1 className="text-lg font-semibold">
             Debug — Supabase connectivity
           </h1>
+
+          {/* Force white text regardless of inherited styles */}
           <button
             onClick={run}
             disabled={running}
-            style={{
-              background: T.OK,
-              color: "#0a0a0a",
-              border: "none",
-              padding: "8px 12px",
-              borderRadius: 10,
-              fontWeight: 600,
-              opacity: running ? 0.6 : 1,
-            }}
+            className="rounded-2xl px-4 py-2 text-sm font-semibold bg-[#5170ff] !text-white 
+                       shadow-[0_8px_30px_rgba(81,112,255,0.25)]
+                       hover:bg-[#3e5deb] active:bg-[#3654d6]
+                       transition-colors disabled:opacity-60"
+            style={{ color: "#fff" }}
           >
-            {running ? "Running…" : "Re-run checks"}
+            <span className="!text-white">
+              {running ? "Running…" : "Re-run checks"}
+            </span>
           </button>
         </div>
       </header>
 
-      <section
-        style={{ maxWidth: 1120, margin: "0 auto", padding: "16px 24px" }}
-      >
+      {/* Summary */}
+      <section className="mx-auto max-w-5xl px-6 py-6">
         <SummaryRow anyError={anyError} anyWarn={anyWarn} />
-
-        <div style={{ display: "grid", gap: 10 }}>
+        <div className="grid gap-3">
           {rows.map((r, i) => (
             <Card
               key={i}
@@ -315,21 +295,17 @@ function SummaryRow({
     : anyWarn
     ? "Warnings detected — see below"
     : "All checks passed";
-  const color = anyError ? T.ERR : anyWarn ? T.WARN : T.OK;
+  const border = anyError ? COLORS.ERR : anyWarn ? COLORS.WARN : COLORS.OK;
 
   return (
     <div
-      style={{
-        background: T.SURFACE,
-        border: `1px solid ${T.BORDER}`,
-        borderLeft: `4px solid ${color}`,
-        borderRadius: 12,
-        padding: 12,
-        marginBottom: 12,
-      }}
+      className="rounded-xl bg-white border p-3"
+      style={{ borderColor: border, borderLeftWidth: 4 }}
     >
-      <strong style={{ color }}>{text}</strong>
-      <div style={{ fontSize: 13, color: T.MUTED, marginTop: 4 }}>
+      <strong className="block" style={{ color: border }}>
+        {text}
+      </strong>
+      <div className="mt-1 text-sm text-gray-600">
         This page only reads from Supabase. No writes or schema changes.
       </div>
     </div>
@@ -347,9 +323,9 @@ function Card({
   detail?: string;
   extra?: unknown;
 }) {
-  const color = status === "ok" ? T.OK : status === "warn" ? T.WARN : T.ERR;
+  const pillBg =
+    status === "ok" ? COLORS.OK : status === "warn" ? COLORS.WARN : COLORS.ERR;
 
-  // Safe stringify for any value (User object, arrays, null, etc.)
   const json = useMemo(() => {
     try {
       return extra === undefined ? undefined : JSON.stringify(extra, null, 2);
@@ -359,54 +335,21 @@ function Card({
   }, [extra]);
 
   return (
-    <div
-      style={{
-        background: T.SURFACE,
-        border: `1px solid ${T.BORDER}`,
-        borderRadius: 12,
-        padding: 12,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ fontWeight: 600 }}>{title}</div>
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-semibold">{title}</div>
         <span
-          style={{
-            color: "#0a0a0a",
-            background: color,
-            borderRadius: 999,
-            padding: "2px 8px",
-            fontSize: 12,
-            fontWeight: 700,
-          }}
+          className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white"
+          style={{ background: pillBg }}
         >
           {status.toUpperCase()}
         </span>
       </div>
-      {detail && (
-        <div style={{ marginTop: 6, fontSize: 13, color: T.MUTED }}>
-          {detail}
-        </div>
-      )}
+
+      {detail && <div className="mt-2 text-sm text-gray-600">{detail}</div>}
+
       {json !== undefined && (
-        <pre
-          style={{
-            marginTop: 8,
-            fontSize: 12,
-            lineHeight: 1.4,
-            color: T.TEXT,
-            background: "#0e1014",
-            border: `1px solid ${T.BORDER}`,
-            borderRadius: 8,
-            padding: 10,
-            overflowX: "auto",
-          }}
-        >
+        <pre className="mt-3 text-xs leading-relaxed text-gray-800 bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
           {json}
         </pre>
       )}

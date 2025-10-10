@@ -53,7 +53,7 @@ export default function RootPage() {
   return <ComingSoon userEmail={userEmail} checking={checking} />;
 }
 
-/* -------------------------- Rockstar Coming Soon -------------------------- */
+/* -------------------------- Coming Soon (light) -------------------------- */
 
 function ComingSoon({
   userEmail,
@@ -63,60 +63,77 @@ function ComingSoon({
   checking: boolean;
 }) {
   return (
-    <main className="relative min-h-screen bg-[#000000] text-white overflow-hidden flex flex-col justify-between">
-      {/* Animated Rockstar-style glow */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,0.08),transparent_60%)] animate-pulse" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_90%,rgba(106,230,178,0.25),transparent_70%)] blur-3xl opacity-70 animate-[pulse_6s_ease-in-out_infinite]" />
+    <main className="relative min-h-screen bg-white text-black overflow-hidden flex flex-col justify-between">
+      {/* Soft accent glow */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute -top-32 left-1/2 -translate-x-1/2 h-80 w-[48rem] rounded-full blur-3xl"
+          style={{
+            background:
+              "radial-gradient(closest-side, rgba(81,112,255,0.18), transparent 70%)",
+          }}
+        />
       </div>
 
       {/* Header */}
-      <header className="z-10 border-b border-white/10">
+      <header className="z-10 border-b border-gray-200 bg-white/70 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-white/10 backdrop-blur grid place-items-center">
-              <span className="text-xs font-bold tracking-wide">TC</span>
+            <div className="h-9 w-9 rounded-full bg-[#5170ff]/10 grid place-items-center">
+              <span className="text-xs font-bold tracking-wide text-[#5170ff]">
+                TC
+              </span>
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight">
                 True Competency
               </h1>
-              <p className="text-xs text-white/60">Interventional Cardiology</p>
+              <p className="text-xs text-gray-500">Interventional Cardiology</p>
             </div>
           </div>
-          <div className="text-sm text-white/60">
+          <div className="text-sm text-gray-600">
             {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
           </div>
         </div>
       </header>
 
       {/* Core section */}
-      <section className="relative z-10 mx-auto max-w-5xl text-center px-6 pt-28 pb-32">
-        <div className="mx-auto mb-10 h-28 w-28 rounded-full bg-white/5 border border-white/10 grid place-items-center shadow-[0_0_60px_15px_rgba(106,230,178,0.3)]">
-          <span className="text-2xl font-bold tracking-tight">TC</span>
+      <section className="relative z-10 mx-auto max-w-5xl text-center px-6 pt-24 pb-28">
+        <div className="mx-auto mb-10 h-28 w-28 rounded-full bg-[#5170ff]/10 border border-[#5170ff]/20 grid place-items-center shadow-[0_0_60px_15px_rgba(81,112,255,0.15)]">
+          <span className="text-2xl font-bold tracking-tight text-[#5170ff]">
+            TC
+          </span>
         </div>
 
         <h2 className="text-5xl md:text-6xl font-bold tracking-tight">
-          <span className="text-transparent bg-clip-text bg-gradient-to-br from-white to-[#6ae6b2] drop-shadow-[0_0_18px_rgba(106,230,178,0.4)]">
+          <span className="text-transparent bg-clip-text bg-gradient-to-br from-black to-[#5170ff]">
             Coming Soon
           </span>
         </h2>
 
-        <p className="mt-6 text-white/70 max-w-2xl mx-auto leading-relaxed">
+        <p className="mt-6 text-gray-600 max-w-2xl mx-auto leading-relaxed">
           A modern platform for interventional cardiology training —
           competencies, assessments, and transparent progress tracking.
         </p>
 
         <div className="mt-10 flex items-center justify-center gap-4">
+          {/* PRIMARY: force white label to beat inherited colors */}
           <a
             href="/signin"
-            className="rounded-xl bg-white text-black px-6 py-3 font-semibold hover:bg-white/90 transition"
+            className="rounded-2xl px-6 py-3 font-semibold bg-[#5170ff] !text-white 
+                       shadow-[0_8px_30px_rgba(81,112,255,0.25)]
+                       hover:bg-[#3e5deb] active:bg-[#3654d6] transition-colors"
+            style={{ color: "#fff" }}
           >
-            {checking ? "Checking session…" : "Sign In"}
+            <span className="!text-white">
+              {checking ? "Checking session…" : "Sign In"}
+            </span>
           </a>
+
+          {/* Secondary */}
           <a
             href="mailto:novruzoff@truecompetency.com"
-            className="rounded-xl border border-white/20 px-6 py-3 font-semibold text-white/90 hover:border-white/40 transition"
+            className="rounded-2xl border border-gray-300 px-6 py-3 font-semibold text-gray-800 hover:bg-gray-50 transition"
           >
             Contact Us
           </a>
@@ -124,25 +141,12 @@ function ComingSoon({
       </section>
 
       {/* Footer */}
-      <footer className="z-10 border-t border-white/10 bg-black/20 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-white/50 flex items-center justify-between">
+      <footer className="z-10 border-t border-gray-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-gray-600 flex items-center justify-between">
           <span>© {new Date().getFullYear()} True Competency</span>
-          <span className="text-white/60">Made with love</span>
+          <span>Made with love</span>
         </div>
       </footer>
-
-      {/* Pulse animation */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0%,
-          100% {
-            opacity: 0.6;
-          }
-          50% {
-            opacity: 1;
-          }
-        }
-      `}</style>
     </main>
   );
 }

@@ -1,16 +1,24 @@
+// src/app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Manrope } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
+import ThemeToggle from "@/components/theme-toggle";
 
-const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
-const geistMono = Geist_Mono({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-geist-mono",
+  variable: "--font-sans",
+  display: "swap",
+});
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-heading",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "True Competency",
-  description: "Doctors and students aligned on competencies and progress.",
+  description: "Interventional Cardiology Training Platform",
 };
 
 export default function RootLayout({
@@ -19,12 +27,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        suppressHydrationWarning
-      >
-        {children}
+    <html lang="en" className={`${inter.variable} ${manrope.variable}`}>
+      <body className="font-sans bg-[var(--background)] text-[var(--foreground)]">
+        <ThemeProvider>
+          {/* Floating Sun/Moon toggle (you can move into a header later) */}
+          <ThemeToggle />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
