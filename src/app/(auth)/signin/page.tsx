@@ -8,17 +8,34 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 type Role = "trainee" | "instructor" | "committee";
 const ACCENT = "#5170ff";
+
 const supabase = createClientComponentClient();
+
+/** Safe error → string */
+function toMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e && "message" in e) {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
 
 export default function SignInPage() {
   const router = useRouter();
 
+  // routing
   const [redirect, setRedirect] = useState("/");
   useEffect(() => {
     const r = new URLSearchParams(window.location.search).get("redirect");
     if (r) setRedirect(r);
   }, []);
 
+  // ui state
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [role, setRole] = useState<Role>("trainee");
   const [email, setEmail] = useState("");
@@ -32,10 +49,17 @@ export default function SignInPage() {
     [email, password]
   );
 
-  async function ensureProfile(id: string, em: string | null, r: Role) {
+  async function ensureProfile(
+    userId: string,
+    emailForRow: string | null,
+    r: Role
+  ) {
     const { error } = await supabase
       .from("profiles")
-      .upsert({ id, email: em ?? "", role: r }, { onConflict: "id" });
+      .upsert(
+        { id: userId, email: emailForRow ?? "", role: r },
+        { onConflict: "id" }
+      );
     if (error) throw error;
   }
 
@@ -47,6 +71,7 @@ export default function SignInPage() {
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
+
         if (data.user) {
           await ensureProfile(data.user.id, data.user.email ?? email, role);
           setMsg("Account created. Please sign in.");
@@ -63,30 +88,30 @@ export default function SignInPage() {
         if (error) throw error;
         if (data.user) router.replace(redirect || "/");
       }
-    } catch (err: any) {
-      setMsg(err?.message ?? "Something went wrong");
+    } catch (err: unknown) {
+      setMsg(toMessage(err) || "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-      {/* Blue ambient glows */}
+    <div className="relative min-h-screen overflow-hidden bg-white text-black">
+      {/* ---- Blue-only ambient glows ---- */}
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute left-1/2 -top-[26%] h-[1000px] w-[1500px] -translate-x-1/2 blur-3xl opacity-80"
           style={{
             background: `radial-gradient(40% 40% at 25% 20%, ${ACCENT}22 0%, transparent 60%),
-                         radial-gradient(35% 35% at 75% 18%, ${ACCENT}1f 0%, transparent 65%),
-                         radial-gradient(55% 55% at 50% 85%, ${ACCENT}1a 0%, transparent 65%)`,
+               radial-gradient(35% 35% at 75% 18%, ${ACCENT}1f 0%, transparent 65%),
+               radial-gradient(55% 55% at 50% 85%, ${ACCENT}1a 0%, transparent 65%)`,
           }}
         />
         <span className="absolute left-[10%] top-[28%] h-44 w-44 rounded-full bg-[rgba(81,112,255,0.12)] blur-3xl animate-[float_9s_ease-in-out_infinite]" />
         <span className="absolute right-[12%] top-[35%] h-36 w-36 rounded-full bg-[rgba(81,112,255,0.10)] blur-3xl animate-[float_12s_ease-in-out_infinite]" />
       </div>
 
-      {/* Header */}
+      {/* ---- Header / Logo with blue glow ---- */}
       <header className="relative z-10">
         <div className="mx-auto max-w-4xl px-6 pt-14 pb-6 text-center">
           <div className="relative mx-auto h-24 w-24">
@@ -105,37 +130,42 @@ export default function SignInPage() {
               priority
             />
           </div>
-
-          <h1 className="mt-4 text-4xl md:text-5xl font-extrabold tracking-tight text-[color:var(--accent)]">
+          <h1
+            className="mt-4 text-4xl md:text-5xl font-extrabold tracking-tight"
+            style={{ color: ACCENT }}
+          >
             True Competency
           </h1>
-          <p className="mt-2 text-sm md:text-base opacity-80">
+          <p className="mt-2 text-gray-600">
             TCIP APSC IVUS Competency Platform
           </p>
-          <span className="mt-3 inline-block rounded-full border border-[#5170ff33] bg-gradient-to-r from-[#5170ff1a] to-[#5170ff0d] px-4 py-1.5 text-xs font-medium text-[color:var(--accent)] shadow-[inset_0_0_14px_rgba(81,112,255,0.18)]">
+          <span className="mt-3 inline-block rounded-full border border-[#5170ff33] bg-gradient-to-r from-[#5170ff1a] to-[#5170ff0d] px-4 py-1.5 text-xs font-medium text-[#5170ff] shadow-[inset_0_0_14px_rgba(81,112,255,0.18)]">
             Medical Training Portal
           </span>
         </div>
       </header>
 
-      {/* Card */}
+      {/* ---- Auth Card ---- */}
       <main className="relative z-10">
         <div className="mx-auto max-w-md px-6 pb-16">
-          <div className="relative rounded-2xl p-[1px] shadow-2xl ring-1 ring-[var(--border)] backdrop-blur">
+          <div className="relative rounded-2xl bg-white/70 p-[1px] shadow-2xl ring-1 ring-black/5 backdrop-blur">
             <div
               aria-hidden
               className="absolute inset-0 rounded-2xl"
               style={{
                 background: `linear-gradient(135deg, ${ACCENT}59, transparent 35%),
-                             linear-gradient(315deg, ${ACCENT}40, transparent 45%)`,
+                   linear-gradient(315deg, ${ACCENT}40, transparent 45%)`,
                 filter: "blur(14px)",
               }}
             />
-            <div className="relative rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-6">
-              <h2 className="text-center text-lg font-semibold text-[color:var(--accent)]">
+            <div className="relative rounded-2xl bg-white p-6">
+              <h2
+                className="text-center text-lg font-semibold"
+                style={{ color: ACCENT }}
+              >
                 {mode === "signup" ? "Create Account" : "Welcome Back"}
               </h2>
-              <p className="mt-1 mb-6 text-center text-sm opacity-80">
+              <p className="mt-1 mb-6 text-center text-sm text-gray-600">
                 {mode === "signup"
                   ? "Sign up to access your dashboard"
                   : "Sign in to continue your learning journey"}
@@ -147,7 +177,7 @@ export default function SignInPage() {
 
               <form onSubmit={handleSubmit} className="mt-4 space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">
+                  <label className="mb-1 block text-sm font-medium text-gray-900">
                     Email Address
                   </label>
                   <input
@@ -156,12 +186,12 @@ export default function SignInPage() {
                     required
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@hospital.org"
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 outline-none transition focus:border-[color:var(--accent)] focus:ring-4 focus:ring-[color:var(--accent)]/20"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 outline-none transition focus:border-[#5170ff] focus:ring-4 focus:ring-[#5170ff]/20"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium">
+                  <label className="mb-1 block text-sm font-medium text-gray-900">
                     Password
                   </label>
                   <div className="relative">
@@ -171,13 +201,13 @@ export default function SignInPage() {
                       required
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 pr-10 outline-none transition focus:border-[color:var(--accent)] focus:ring-4 focus:ring-[color:var(--accent)]/20"
+                      className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 pr-10 outline-none transition focus:border-[#5170ff] focus:ring-4 focus:ring-[#5170ff]/20"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPw((v) => !v)}
                       aria-label={showPw ? "Hide password" : "Show password"}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/30"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-500 hover:text-black focus:outline-none focus:ring-2 focus:ring-[#5170ff]/30"
                     >
                       {showPw ? <IconEyeOff /> : <IconEye />}
                     </button>
@@ -196,7 +226,8 @@ export default function SignInPage() {
                     <button
                       type="submit"
                       disabled={loading || !canSubmit}
-                      className="btn-primary relative z-10 rounded-xl bg-[color:var(--accent)] px-8 py-2.5 font-semibold shadow-[0_10px_30px_rgba(81,112,255,0.25)] transition hover:brightness-110 active:brightness-95 disabled:opacity-50"
+                      className="relative z-10 rounded-xl bg-[#5170ff] px-8 py-2.5 font-semibold text-white shadow-[0_10px_30px_rgba(81,112,255,0.25)] transition hover:bg-[#3e5deb] active:bg-[#3654d6] disabled:opacity-50"
+                      style={{ color: "#fff" }}
                     >
                       {loading
                         ? "Please wait…"
@@ -209,18 +240,18 @@ export default function SignInPage() {
               </form>
 
               {msg && (
-                <div className="mt-4 text-center text-sm text-[color:var(--err)]">
+                <div className="mt-4 text-center text-sm text-red-600">
                   {msg}
                 </div>
               )}
 
-              <p className="mt-6 text-center text-sm opacity-80">
+              <p className="mt-6 text-center text-sm text-gray-600">
                 {mode === "signin" ? (
                   <>
                     Don&apos;t have an account?{" "}
                     <button
                       onClick={() => setMode("signup")}
-                      className="font-medium text-[color:var(--accent)] hover:underline"
+                      className="font-medium text-[#5170ff] hover:underline"
                     >
                       Create one
                     </button>
@@ -230,7 +261,7 @@ export default function SignInPage() {
                     Already have an account?{" "}
                     <button
                       onClick={() => setMode("signin")}
-                      className="font-medium text-[color:var(--accent)] hover:underline"
+                      className="font-medium text-[#5170ff] hover:underline"
                     >
                       Sign in
                     </button>
@@ -238,7 +269,7 @@ export default function SignInPage() {
                 )}
               </p>
 
-              <div className="mt-6 flex justify-center gap-4 text-xs font-medium text-[color:var(--accent)]">
+              <div className="mt-6 flex justify-center gap-4 text-xs font-medium text-[#5170ff]">
                 <a href="#" className="hover:underline">
                   Terms
                 </a>
@@ -252,7 +283,7 @@ export default function SignInPage() {
         </div>
       </main>
 
-      <footer className="relative z-10 pb-10 text-center text-xs opacity-70">
+      <footer className="relative z-10 pb-10 text-center text-xs text-gray-500">
         © {new Date().getFullYear()} True Competency. All rights reserved.
       </footer>
 
@@ -273,7 +304,7 @@ export default function SignInPage() {
   );
 }
 
-/* ------------------ Bits ------------------ */
+/* ------------------ Small bits ------------------ */
 
 function RolePicker({
   value,
@@ -283,9 +314,11 @@ function RolePicker({
   onChange: (r: Role) => void;
 }) {
   const base =
-    "w-full text-left rounded-xl border p-4 transition-colors bg-[var(--surface)] border-[var(--border)]";
+    "w-full text-left rounded-xl border p-4 transition-colors bg-white";
   const active =
-    "ring-2 ring-[color:var(--accent)]/20 border-[color:var(--accent)] shadow-[0_10px_30px_rgba(81,112,255,0.10)]";
+    "border-[#5170ff] ring-2 ring-[#5170ff]/20 shadow-[0_10px_30px_rgba(81,112,255,0.10)]";
+  const idle = "border-gray-200 hover:border-gray-300";
+
   return (
     <div className="grid gap-3">
       <RoleCard
@@ -293,21 +326,21 @@ function RolePicker({
         desc="Track your competency progress"
         active={value === "trainee"}
         onClick={() => onChange("trainee")}
-        className={`${base} ${value === "trainee" ? active : ""}`}
+        className={`${base} ${value === "trainee" ? active : idle}`}
       />
       <RoleCard
         title="Instructor"
         desc="Supervise and assess trainees"
         active={value === "instructor"}
         onClick={() => onChange("instructor")}
-        className={`${base} ${value === "instructor" ? active : ""}`}
+        className={`${base} ${value === "instructor" ? active : idle}`}
       />
       <RoleCard
         title="Committee"
         desc="Manage competency standards"
         active={value === "committee"}
         onClick={() => onChange("committee")}
-        className={`${base} ${value === "committee" ? active : ""}`}
+        className={`${base} ${value === "committee" ? active : idle}`}
       />
     </div>
   );
@@ -332,9 +365,7 @@ function RoleCard({
         <span
           className={[
             "inline-flex h-9 w-9 items-center justify-center rounded-full",
-            active
-              ? "bg-[color:var(--accent)] text-white"
-              : "bg-[var(--field)] border border-[var(--border)]",
+            active ? "bg-[#5170ff] text-white" : "bg-gray-100 text-gray-700",
           ].join(" ")}
         >
           <svg
@@ -353,7 +384,7 @@ function RoleCard({
         </span>
         <div>
           <div className="font-medium">{title}</div>
-          <div className="text-sm opacity-80">{desc}</div>
+          <div className="text-sm text-gray-600">{desc}</div>
         </div>
       </div>
     </button>
@@ -377,6 +408,7 @@ function IconEye() {
     </svg>
   );
 }
+
 function IconEyeOff() {
   return (
     <svg
