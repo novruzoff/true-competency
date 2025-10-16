@@ -95,7 +95,7 @@ body {
 
 /* Card */
 .card {
-  background: var(--background);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 6px rgba(0, 0, 0, 0.04);
@@ -106,4 +106,86 @@ body {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent);
   border-radius: 8px;
+}
+
+/* ----- Fancy but token-respecting helpers ----- */
+
+/* Subtle animated SVG grid that respects border token */
+.bg-grid {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--border) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
+
+/* Super-light film grain for depth */
+.bg-noise {
+  background-image: url("data:image/svg+xml;utf8,\
+  <svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'>\
+    <filter id='n'>\
+      <feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/>\
+      <feColorMatrix type='saturate' values='0'/>\
+    </filter>\
+    <rect width='120' height='120' filter='url(%23n)' opacity='0.6'/>\
+  </svg>");
+  background-size: 240px 240px;
+}
+
+/* Accent glow line used under focused fields */
+.glow-accent {
+  background: color-mix(in oklab, var(--accent) 65%, transparent);
+}
+
+/* Soft animated accent shine on buttons */
+.shine {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--accent) 35%, transparent),
+    transparent
+  );
+  animation: shineMove 2.8s linear infinite;
+  transform: translateX(-100%);
+}
+@keyframes shineMove {
+  0% {
+    transform: translateX(-120%);
+  }
+  60% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* Floating animations for blobs (kept very subtle) */
+@keyframes floatSlow {
+  0% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(10px) translateX(6px);
+  }
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+}
+@keyframes floatSlower {
+  0% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-12px) translateX(-8px);
+  }
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+}
+.animate-float-slow {
+  animation: floatSlow 12s ease-in-out infinite;
+}
+.animate-float-slower {
+  animation: floatSlower 16s ease-in-out infinite;
 }
