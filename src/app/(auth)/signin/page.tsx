@@ -244,7 +244,7 @@ export default function SignInPage() {
             True Competency
           </h1>
           <p className="mt-1 text-center text-sm text-[var(--muted)]">
-            Interventional Cardiology Training Platform
+            TCIP APSC IVUS Competency Platform
           </p>
           <span className="mt-2 inline-block rounded-full border px-3 py-1 text-xs border-[var(--border)] text-[var(--foreground)]/80 backdrop-blur-sm">
             Medical Training Portal
@@ -282,9 +282,11 @@ export default function SignInPage() {
                     What is True Competency?
                   </h2>
                   <p className="text-sm leading-6 text-[var(--muted)]">
-                    A competency-based training portal for Interventional
-                    Cardiology. Log procedures, gather evidence, request
-                    assessments, and track progress against program standards.
+                    A modern, data-driven training platform designed to help
+                    interventional cardiology trainees, instructors, and
+                    committees track, assess, and advance clinical competencies
+                    through structured evaluations and real-time progress
+                    insights.
                   </p>
                 </>
               )}
