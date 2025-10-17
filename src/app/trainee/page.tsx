@@ -1,8 +1,10 @@
+// src/app/trainee/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 type Competency = {
   id: string;
@@ -23,11 +25,13 @@ type ProgressRow = {
 
 type Profile = {
   id: string;
-  role: "student" | "doctor";
+  role: "trainee" | "instructor" | "committee" | "student" | "doctor";
 };
 
-export default function StudentDashboard() {
-  const [email, setEmail] = useState<string | null>(null);
+export default function TraineeDashboard() {
+  const router = useRouter();
+  const supabase = createClientComponentClient();
+
   const [rows, setRows] = useState<
     Array<ProgressRow & { competency: Competency }>
   >([]);
@@ -39,6 +43,7 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       setLoading(true);
       setErr(null);
@@ -48,9 +53,12 @@ export default function StudentDashboard() {
         const { data: userRes, error: getUserErr } =
           await supabase.auth.getUser();
         if (getUserErr) throw getUserErr;
+
         const uid = userRes.user?.id ?? null;
-        setEmail(userRes.user?.email ?? null);
-        if (!uid) throw new Error("Not signed in");
+        if (!uid) {
+          router.replace("/signin?redirect=/trainee");
+          return;
+        }
 
         const { data: prof, error: profErr } = await supabase
           .from("profiles")
@@ -93,30 +101,26 @@ export default function StudentDashboard() {
           compMap = new Map(list.map((c) => [c.id, c]));
         }
 
-        const merged = progressRows.map((r) => {
-          const c = compMap.get(r.competency_id);
-          return {
+        const merged = progressRows
+          .map((r) => ({
             ...r,
-            competency: c ?? {
+            competency: compMap.get(r.competency_id) ?? {
               id: r.competency_id,
               name: null,
               difficulty: null,
               tags: null,
             },
-          };
-        });
-
-        merged.sort((a, b) => {
-          if (a.pct !== b.pct) return a.pct - b.pct;
-          const an = a.competency.name ?? a.competency.id;
-          const bn = b.competency.name ?? b.competency.id;
-          return an.localeCompare(bn);
-        });
+          }))
+          .sort((a, b) => {
+            if (a.pct !== b.pct) return a.pct - b.pct;
+            const an = a.competency.name ?? a.competency.id;
+            const bn = b.competency.name ?? b.competency.id;
+            return an.localeCompare(bn);
+          });
 
         setRows(merged);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setErr(msg);
+        setErr(e instanceof Error ? e.message : String(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -125,7 +129,7 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router, supabase]);
 
   const totalAssigned = rows.length;
   const avgPct = useMemo(() => {
@@ -135,29 +139,19 @@ export default function StudentDashboard() {
   }, [rows]);
 
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors">
-      {/* Header */}
-      <header className="border-b border-[var(--border)] backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[color:var(--accent)] grid place-items-center font-bold text-sm">
-              TC
-            </div>
-            <div>
-              <h1 className="text-base font-semibold leading-tight">
-                True Competency —{" "}
-                <span className="text-[color:var(--accent)]">Trainee</span>
-              </h1>
-              <p className="text-xs text-[var(--muted)]">
-                Your assigned topics & progress
-              </p>
-            </div>
-          </div>
-          <div className="text-xs text-[var(--muted)]">
-            {email ?? "Not signed in"}
-          </div>
-        </div>
-      </header>
+    // Global header/footer come from layout — no local header here
+    <main className="bg-[var(--background)] text-[var(--foreground)] transition-colors">
+      {/* Page hero (big, clear) */}
+      <section className="mx-auto max-w-5xl px-6 pt-8 pb-6">
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+          Trainee dashboard
+        </h1>
+        <div className="accent-underline mt-3" />
+        <p className="mt-3 text-sm md:text-base text-[var(--muted)] max-w-prose">
+          Review your assigned topics, continue where you left off, and track
+          your progress toward competency.
+        </p>
+      </section>
 
       {/* Notices */}
       <section className="mx-auto max-w-5xl px-6 py-3">
@@ -175,7 +169,7 @@ export default function StudentDashboard() {
       </section>
 
       {/* KPIs */}
-      <section className="mx-auto max-w-5xl px-6 pb-10">
+      <section className="mx-auto max-w-5xl px-6 pb-8">
         <div className="mb-4 flex items-center gap-3 text-sm text-[var(--muted)]">
           <span>
             Assigned topics:{" "}
@@ -223,11 +217,7 @@ export default function StudentDashboard() {
                 <div className="mt-2 h-2 w-full overflow-hidden rounded-full border border-[var(--border)] bg-[var(--field)]">
                   <div
                     className="h-full"
-                    style={{
-                      width: `${r.pct}%`,
-                      background: "var(--accent)",
-                      boxShadow: `0 0 0 1px var(--accent)20 inset`,
-                    }}
+                    style={{ width: `${r.pct}%`, background: "var(--accent)" }}
                   />
                 </div>
 
@@ -244,10 +234,6 @@ export default function StudentDashboard() {
           })}
         </div>
       </section>
-
-      <footer className="pb-10 text-center text-xs text-[var(--muted)]">
-        © {new Date().getFullYear()} True Competency. All rights reserved.
-      </footer>
     </main>
   );
 }

@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 const supabase = createClientComponentClient();
@@ -15,9 +15,9 @@ const ROLE_HOME: Record<Exclude<UserRole, "committee">, string> = {
 };
 
 export default function RootPage() {
-  const router = useRouter();
   const [checking, setChecking] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [dashUrl, setDashUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,11 +26,17 @@ export default function RootPage() {
         const { data: u, error } = await supabase.auth.getUser();
         if (error) throw error;
         const uid = u.user?.id ?? null;
+
         if (!uid) {
-          if (!cancelled) setChecking(false);
+          if (!cancelled) {
+            setUserEmail(null);
+            setDashUrl(null);
+            setChecking(false);
+          }
           return;
         }
-        setUserEmail(u.user?.email ?? null);
+
+        if (!cancelled) setUserEmail(u.user?.email ?? null);
 
         const { data: prof, error: perr } = await supabase
           .from("profiles")
@@ -39,114 +45,129 @@ export default function RootPage() {
           .single<Profile>();
         if (perr) throw perr;
 
-        if (prof.role === "committee") router.replace("/committee");
-        else router.replace(ROLE_HOME[prof.role]);
+        const home =
+          prof.role === "committee" ? "/committee" : ROLE_HOME[prof.role];
+
+        if (!cancelled) {
+          setDashUrl(home);
+          setChecking(false);
+        }
       } catch {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
-  return <ComingSoon userEmail={userEmail} checking={checking} />;
+  return (
+    <Landing checking={checking} userEmail={userEmail} dashUrl={dashUrl} />
+  );
 }
 
-/* -------------------------- Coming Soon (light) -------------------------- */
-
-function ComingSoon({
-  userEmail,
+function Landing({
   checking,
+  userEmail,
+  dashUrl,
 }: {
-  userEmail: string | null;
   checking: boolean;
+  userEmail: string | null;
+  dashUrl: string | null;
 }) {
   return (
-    <main className="relative min-h-screen bg-white text-black overflow-hidden flex flex-col justify-between">
-      {/* Soft accent glow */}
-      <div className="pointer-events-none absolute inset-0">
+    <div className="relative flex-1">
+      {/* Background layers */}
+      <div
+        aria-hidden
+        className="bg-grid absolute inset-0 opacity-60 dark:opacity-20"
+      />
+      <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.06]" />
+      <div aria-hidden className="beams pointer-events-none absolute inset-0" />
+
+      {/* Hero: centered between header & footer */}
+      <section className="relative z-10">
         <div
-          className="absolute -top-32 left-1/2 -translate-x-1/2 h-80 w-[48rem] rounded-full blur-3xl"
-          style={{
-            background:
-              "radial-gradient(closest-side, rgba(81,112,255,0.18), transparent 70%)",
-          }}
-        />
-      </div>
+          className={[
+            "mx-auto max-w-6xl px-6",
+            "min-h-[calc(100svh-8rem)]", // 64px header + 64px footer
+            "grid md:grid-cols-2 gap-10 items-center", // centers vertically
+          ].join(" ")}
+        >
+          {/* LEFT: text */}
+          <div className="text-center md:text-left">
+            <h2 className="text-4xl md:text-5xl font-semibold tracking-tight leading-tight">
+              Competency-based training,
+              <br />
+              streamlined.
+            </h2>
+            <div className="accent-underline mt-4" />
+            <p className="mt-6 max-w-prose text-sm md:text-base text-[var(--muted)] leading-relaxed">
+              A modern portal for interventional cardiology: log procedures,
+              collect evidence, request assessments, and track progress against
+              program standards with clarity.
+            </p>
 
-      {/* Header */}
-      <header className="z-10 border-b border-gray-200 bg-white/70 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-[#5170ff]/10 grid place-items-center">
-              <span className="text-xs font-bold tracking-wide text-[#5170ff]">
-                TC
-              </span>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight">
-                True Competency
-              </h1>
-              <p className="text-xs text-gray-500">Interventional Cardiology</p>
+            <div className="mt-8 flex items-center justify-center md:justify-start gap-4">
+              {!dashUrl ? (
+                <a
+                  href="/signin"
+                  className={[
+                    "rounded-2xl px-6 py-3 font-semibold btn-primary",
+                    "bg-[var(--accent)] shadow-[0_8px_30px_color-mix(in_oklab,var(--accent)_25%,transparent)]",
+                    "hover:opacity-95 active:opacity-90 transition",
+                  ].join(" ")}
+                >
+                  <span className="!text-white">
+                    {checking ? "Checking session…" : "Sign In"}
+                  </span>
+                </a>
+              ) : (
+                <a
+                  href={dashUrl}
+                  className="rounded-2xl px-6 py-3 font-semibold bg-[var(--accent)] btn-primary shadow-[0_8px_30px_color-mix(in_oklab,var(--accent)_25%,transparent)] hover:opacity-95"
+                >
+                  <span className="!text-white">Continue</span>
+                </a>
+              )}
+
+              <a
+                href="mailto:novruzoff@truecompetency.com"
+                className="rounded-2xl border border-[var(--border)] px-6 py-3 font-semibold text-[var(--foreground)] hover:bg-[color:var(--surface)]/60 transition"
+              >
+                Contact Us
+              </a>
             </div>
           </div>
-          <div className="text-sm text-gray-600">
-            {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
+
+          {/* RIGHT: free-floating glowing logo (no borders) */}
+          <div className="relative mx-auto w-full max-w-[520px] grid place-items-center">
+            <div
+              aria-hidden
+              className="absolute -inset-10 blur-3xl opacity-70 logo-halo"
+            />
+            <div aria-hidden className="absolute -inset-2 rotate-12 opacity-35">
+              <div className="logo-beam" />
+            </div>
+            <Image
+              src="/TC_Logo.png"
+              alt="True Competency"
+              width={240}
+              height={240}
+              className="relative z-[1] object-contain drop-shadow-[0_30px_90px_color-mix(in_oklab,var(--accent)_45%,transparent)]"
+              priority
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-[2rem] animate-pulse-glow"
+              style={{
+                filter:
+                  "drop-shadow(0 0 80px color-mix(in oklab, var(--accent) 35%, transparent))",
+              }}
+            />
           </div>
-        </div>
-      </header>
-
-      {/* Core section */}
-      <section className="relative z-10 mx-auto max-w-5xl text-center px-6 pt-24 pb-28">
-        <div className="mx-auto mb-10 h-28 w-28 rounded-full bg-[#5170ff]/10 border border-[#5170ff]/20 grid place-items-center shadow-[0_0_60px_15px_rgba(81,112,255,0.15)]">
-          <span className="text-2xl font-bold tracking-tight text-[#5170ff]">
-            TC
-          </span>
-        </div>
-
-        <h2 className="text-5xl md:text-6xl font-bold tracking-tight">
-          <span className="text-transparent bg-clip-text bg-gradient-to-br from-black to-[#5170ff]">
-            Coming Soon
-          </span>
-        </h2>
-
-        <p className="mt-6 text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          A modern platform for interventional cardiology training —
-          competencies, assessments, and transparent progress tracking.
-        </p>
-
-        <div className="mt-10 flex items-center justify-center gap-4">
-          {/* PRIMARY: force white label to beat inherited colors */}
-          <a
-            href="/signin"
-            className="rounded-2xl px-6 py-3 font-semibold bg-[#5170ff] !text-white 
-                       shadow-[0_8px_30px_rgba(81,112,255,0.25)]
-                       hover:bg-[#3e5deb] active:bg-[#3654d6] transition-colors"
-            style={{ color: "#fff" }}
-          >
-            <span className="!text-white">
-              {checking ? "Checking session…" : "Sign In"}
-            </span>
-          </a>
-
-          {/* Secondary */}
-          <a
-            href="mailto:novruzoff@truecompetency.com"
-            className="rounded-2xl border border-gray-300 px-6 py-3 font-semibold text-gray-800 hover:bg-gray-50 transition"
-          >
-            Contact Us
-          </a>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="z-10 border-t border-gray-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-gray-600 flex items-center justify-between">
-          <span>© {new Date().getFullYear()} True Competency</span>
-          <span>Made with love</span>
-        </div>
-      </footer>
-    </main>
+    </div>
   );
 }

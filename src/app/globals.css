@@ -189,3 +189,110 @@ body {
 .animate-float-slower {
   animation: floatSlower 16s ease-in-out infinite;
 }
+
+/* Accent underline for hero headline (kept) */
+.accent-underline {
+  height: 3px;
+  width: 86px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow: 0 0 24px color-mix(in oklab, var(--accent) 35%, transparent);
+}
+
+/* Beams (kept from earlier) */
+.beams::before,
+.beams::after {
+  content: "";
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 70%;
+  pointer-events: none;
+  background: linear-gradient(
+      100deg,
+      color-mix(in oklab, var(--accent) 18%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      60rem 12rem at 20% 0%,
+      color-mix(in oklab, var(--accent) 12%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      50rem 10rem at 80% 10%,
+      color-mix(in oklab, var(--accent) 12%, transparent),
+      transparent 60%
+    );
+  filter: blur(18px);
+  opacity: 0.45;
+  transform: translate3d(0, 0, 0);
+  animation: panBeams 24s linear infinite;
+}
+.beams::after {
+  inset: -10% -20% auto -20%;
+  height: 55%;
+  opacity: 0.35;
+  animation-duration: 32s;
+}
+@keyframes panBeams {
+  0% {
+    transform: translateX(-8%) translateY(0);
+  }
+  50% {
+    transform: translateX(8%) translateY(-2%);
+  }
+  100% {
+    transform: translateX(-8%) translateY(0);
+  }
+}
+
+/* Glowing logo helpers */
+.logo-halo {
+  background: radial-gradient(
+      60% 80% at 50% 30%,
+      color-mix(in oklab, var(--accent) 20%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      50% 60% at 60% 70%,
+      color-mix(in oklab, var(--accent) 14%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 50% at 30% 60%,
+      color-mix(in oklab, var(--accent) 12%, transparent),
+      transparent 70%
+    );
+}
+
+.logo-beam {
+  height: 100%;
+  width: 100%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in oklab, var(--accent) 12%, transparent) 90deg,
+    transparent 180deg,
+    color-mix(in oklab, var(--accent) 8%, transparent) 270deg,
+    transparent 360deg
+  );
+  filter: blur(24px);
+  animation: spin 24s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 12%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 12px color-mix(in oklab, var(--accent) 6%, transparent);
+  }
+}
+.animate-pulse-glow {
+  animation: pulseGlow 6s ease-in-out infinite;
+}

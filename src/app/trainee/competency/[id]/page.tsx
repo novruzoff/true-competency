@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 /* ------------------------- Types ------------------------- */
 type Competency = {
@@ -38,11 +38,13 @@ type Answer = {
 
 type OptionsByQ = Record<string, Option[]>;
 
-/* --------------------- Utils ---------------------- */
+/* --------------------- Theme tokens ---------------------- */
 const ACCENT = "var(--accent)";
 const FG = "var(--foreground)";
 const BG = "var(--background)";
+const SURFACE = "var(--surface)";
 const BORDER = "var(--border)";
+const MUTED = "var(--muted)";
 
 // softer/muted text via color-mix so it adapts to light/dark automatically
 const muted = (ratio = 55) =>
@@ -50,21 +52,9 @@ const muted = (ratio = 55) =>
     100 - ratio
   }%, transparent ${ratio}%)`;
 
-function getErrorMessage(e: unknown) {
-  if (!e) return "Unknown error";
-  if (e instanceof Error) return e.message;
-  const any = e as { message?: string; details?: string; hint?: string };
-  if (any?.message)
-    return [any.message, any.details, any.hint].filter(Boolean).join(" — ");
-  try {
-    return JSON.stringify(e);
-  } catch {
-    return String(e);
-  }
-}
-
 /* --------------------- Page ---------------------- */
 export default function TraineeCompetencyPage() {
+  const supabase = createClientComponentClient();
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const competencyId = params.id;
@@ -109,6 +99,7 @@ export default function TraineeCompetencyPage() {
         const uid = u.user?.id ?? null;
         setUserId(uid);
         setUserEmail(u.user?.email ?? null);
+
         if (!uid) {
           router.replace(
             `/signin?redirect=/trainee/competency/${competencyId}`
@@ -177,8 +168,10 @@ export default function TraineeCompetencyPage() {
         } else {
           setAnswers({});
         }
-      } catch (e) {
-        setErr(getErrorMessage(e));
+      } catch (e: any) {
+        const msg =
+          e?.message || e?.details || e?.hint || "Something went wrong";
+        setErr(msg);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -187,10 +180,9 @@ export default function TraineeCompetencyPage() {
     return () => {
       cancelled = true;
     };
-  }, [competencyId, router]);
+  }, [competencyId, router, supabase]);
 
   /* -------------------- Handlers -------------------- */
-  // Submit MCQ (selected_option_id only; trigger computes is_correct)
   async function submitMCQ(qid: string) {
     if (!userId) return;
     const selected = choice[qid];
@@ -217,7 +209,7 @@ export default function TraineeCompetencyPage() {
         {
           student_id: userId,
           question_id: qid,
-          selected_option_id: selected, // trigger sets is_correct
+          selected_option_id: selected, // DB trigger computes is_correct
           answered_at: new Date().toISOString(),
         },
         { onConflict: "student_id,question_id" }
@@ -243,7 +235,8 @@ export default function TraineeCompetencyPage() {
         });
       }
     } catch (e) {
-      setErr(getErrorMessage(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setErr(msg);
     } finally {
       setSavingQ(null);
     }
@@ -251,50 +244,42 @@ export default function TraineeCompetencyPage() {
 
   /* -------------------- Render -------------------- */
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        background: BG,
-        color: FG,
-      }}
-    >
-      {/* Header */}
-      <header style={{ borderBottom: `1px solid ${BORDER}` }}>
-        <div className="mx-auto max-w-5xl px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/trainee")}
-              className="rounded-lg px-3 py-1.5 text-sm"
-              style={{
-                border: `1px solid ${BORDER}`,
-                background: BG,
-              }}
-            >
-              ← Back
-            </button>
-            <div>
-              <h1 className="text-lg md:text-xl font-semibold tracking-tight">
-                {competency ? competency.name : "Loading…"}
-              </h1>
-              <p
-                className="text-xs"
-                style={{ color: muted(55) }}
-                title={userEmail ?? undefined}
-              >
-                {competency?.difficulty ?? "—"} •{" "}
-                {userEmail ? `Signed in as ${userEmail}` : "Not signed in"}
-              </p>
-            </div>
-          </div>
+    // Global header/footer come from layout — we render only page content
+    <main className="bg-[var(--background)] text-[var(--foreground)] transition-colors">
+      {/* Page hero */}
+      <section className="mx-auto max-w-5xl px-6 pt-8 pb-5">
+        <button
+          onClick={() => router.push("/trainee")}
+          className="inline-flex items-center gap-2 text-sm rounded-lg border px-3 py-1.5 hover:bg-[color:var(--surface)]/60 transition"
+          style={{ borderColor: BORDER, color: ACCENT }}
+        >
+          <span aria-hidden>←</span>
+          Back to dashboard
+        </button>
 
-          <div className="w-52">
-            <Progress pct={pct} />
-          </div>
+        <h1 className="mt-4 text-2xl md:text-3xl font-semibold tracking-tight">
+          {competency ? competency.name : "Loading…"}
+        </h1>
+        <div className="accent-underline mt-3" />
+        <p className="mt-2 text-sm md:text-base" style={{ color: MUTED }}>
+          {competency?.difficulty ?? "—"}
+        </p>
+
+        {/* right-aligned progress on wide screens */}
+        <div className="mt-4 md:mt-0 md:float-right md:ml-6 md:w-60">
+          <Progress pct={pct} />
         </div>
-      </header>
+      </section>
+
+      <hr
+        className="border-0 h-[1px] mx-auto max-w-5xl"
+        style={{
+          background: `color-mix(in oklab, ${ACCENT} 20%, transparent)`,
+        }}
+      />
 
       {/* Body */}
-      <main className="mx-auto max-w-5xl px-6 py-6">
+      <section className="mx-auto max-w-5xl px-6 py-6 clear-both">
         {/* Top line: answered count */}
         <div className="mb-4 text-sm" style={{ color: muted(45) }}>
           {answeredCount}/{total} answered • {pct}%
@@ -320,14 +305,14 @@ export default function TraineeCompetencyPage() {
               <div
                 key={i}
                 className="h-24 rounded-xl animate-pulse"
-                style={{ border: `1px solid ${BORDER}`, background: BG }}
+                style={{ border: `1px solid ${BORDER}`, background: SURFACE }}
               />
             ))}
           </div>
         ) : questions.length === 0 ? (
           <div
             className="rounded-xl p-5"
-            style={{ border: `1px solid ${BORDER}`, background: BG }}
+            style={{ border: `1px solid ${BORDER}`, background: SURFACE }}
           >
             <p className="text-sm" style={{ color: muted(40) }}>
               No questions have been added to this competency yet.
@@ -348,7 +333,7 @@ export default function TraineeCompetencyPage() {
                     qRefs.current[q.id] = el;
                   }}
                   className="rounded-xl p-4"
-                  style={{ border: `1px solid ${BORDER}`, background: BG }}
+                  style={{ border: `1px solid ${BORDER}`, background: SURFACE }}
                 >
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-4">
@@ -392,7 +377,7 @@ export default function TraineeCompetencyPage() {
                             className="flex items-start gap-2 rounded-lg p-3 cursor-pointer"
                             style={{
                               border: `1px solid ${BORDER}`,
-                              background: "var(--background)",
+                              background: SURFACE,
                             }}
                           >
                             <input
@@ -426,10 +411,10 @@ export default function TraineeCompetencyPage() {
                             disabled={
                               isCorrect || !choice[q.id] || savingQ === q.id
                             }
-                            className="rounded-lg px-3 py-2 text-sm"
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition"
                             style={{
                               border: `1px solid ${BORDER}`,
-                              background: "var(--background)",
+                              background: SURFACE,
                               color: choice[q.id] ? FG : muted(40),
                               boxShadow: choice[q.id]
                                 ? "0 8px 24px rgba(81,112,255,0.18)"
@@ -437,6 +422,15 @@ export default function TraineeCompetencyPage() {
                             }}
                           >
                             {isCorrect ? "Saved" : "Submit answer"}
+                            {!isCorrect && (
+                              <span
+                                aria-hidden
+                                className="inline-block"
+                                style={{ color: ACCENT }}
+                              >
+                                →
+                              </span>
+                            )}
                           </button>
                         </div>
                       </div>
@@ -449,7 +443,7 @@ export default function TraineeCompetencyPage() {
                           disabled
                           style={{
                             border: `1px solid ${BORDER}`,
-                            background: "var(--background)",
+                            background: SURFACE,
                             color: FG,
                           }}
                         />
@@ -476,8 +470,8 @@ export default function TraineeCompetencyPage() {
             })}
           </div>
         )}
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }
 
@@ -498,7 +492,7 @@ function Progress({ pct }: { pct: number }) {
           style={{
             width: `${pct}%`,
             transition: "width .25s ease",
-            background: "#34d399", // keep your green
+            background: ACCENT, // light blue bar
           }}
         />
       </div>
