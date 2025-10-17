@@ -164,9 +164,13 @@ export default function TraineeCompetencyPage() {
         } else {
           setAnswers({});
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         const msg =
-          e?.message || e?.details || e?.hint || "Something went wrong";
+          e instanceof Error
+            ? e.message
+            : typeof e === "string"
+            ? e
+            : "Something went wrong";
         setErr(msg);
       } finally {
         if (!cancelled) setLoading(false);
@@ -231,7 +235,12 @@ export default function TraineeCompetencyPage() {
         });
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg =
+        e instanceof Error
+          ? e.message
+          : typeof e === "string"
+          ? e
+          : "Failed to submit answer";
       setErr(msg);
     } finally {
       setSavingQ(null);
@@ -472,7 +481,6 @@ export default function TraineeCompetencyPage() {
 }
 
 /* ----------------------------- UI Bits --------------------------------- */
-
 function Progress({ pct }: { pct: number }) {
   return (
     <div>
