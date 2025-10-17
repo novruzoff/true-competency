@@ -12,6 +12,7 @@ const inter = Inter({
   variable: "--font-sans",
   display: "swap",
 });
+
 const manrope = Manrope({
   subsets: ["latin"],
   variable: "--font-heading",
@@ -30,14 +31,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${manrope.variable}`}>
-      {/* Body no longer controls flex — wrapper inside does */}
-      <body className="font-sans bg-[var(--background)] text-[var(--foreground)]">
+      <body className="font-sans bg-[var(--background)] text-[var(--foreground)] overflow-x-hidden">
         <ThemeProvider>
-          {/* FLEX WRAPPER: this is the key fix */}
+          {/* FLEX WRAPPER: ensures footer sticks & full height maintained */}
           <div className="min-h-svh flex flex-col">
             <Header />
             <ThemeToggle />
-            <main className="flex-1 flex flex-col">{children}</main>
+            <main className="flex-1 flex flex-col overflow-x-hidden">
+              {children}
+            </main>
             <Footer />
           </div>
         </ThemeProvider>
