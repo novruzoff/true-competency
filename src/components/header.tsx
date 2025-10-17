@@ -35,7 +35,7 @@ export default function Header({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {

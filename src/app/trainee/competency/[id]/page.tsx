@@ -41,7 +41,6 @@ type OptionsByQ = Record<string, Option[]>;
 /* --------------------- Theme tokens ---------------------- */
 const ACCENT = "var(--accent)";
 const FG = "var(--foreground)";
-const BG = "var(--background)";
 const SURFACE = "var(--surface)";
 const BORDER = "var(--border)";
 const MUTED = "var(--muted)";
@@ -61,7 +60,6 @@ export default function TraineeCompetencyPage() {
 
   // session/user
   const [userId, setUserId] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // data
   const [competency, setCompetency] = useState<Competency | null>(null);
@@ -98,8 +96,6 @@ export default function TraineeCompetencyPage() {
         if (uerr) throw uerr;
         const uid = u.user?.id ?? null;
         setUserId(uid);
-        setUserEmail(u.user?.email ?? null);
-
         if (!uid) {
           router.replace(
             `/signin?redirect=/trainee/competency/${competencyId}`
@@ -234,7 +230,7 @@ export default function TraineeCompetencyPage() {
           block: "center",
         });
       }
-    } catch (e) {
+    } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
     } finally {

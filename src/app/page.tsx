@@ -16,7 +16,6 @@ const ROLE_HOME: Record<Exclude<UserRole, "committee">, string> = {
 
 export default function RootPage() {
   const [checking, setChecking] = useState(true);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [dashUrl, setDashUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,14 +28,11 @@ export default function RootPage() {
 
         if (!uid) {
           if (!cancelled) {
-            setUserEmail(null);
             setDashUrl(null);
             setChecking(false);
           }
           return;
         }
-
-        if (!cancelled) setUserEmail(u.user?.email ?? null);
 
         const { data: prof, error: perr } = await supabase
           .from("profiles")
@@ -61,18 +57,14 @@ export default function RootPage() {
     };
   }, []);
 
-  return (
-    <Landing checking={checking} userEmail={userEmail} dashUrl={dashUrl} />
-  );
+  return <Landing checking={checking} dashUrl={dashUrl} />;
 }
 
 function Landing({
   checking,
-  userEmail,
   dashUrl,
 }: {
   checking: boolean;
-  userEmail: string | null;
   dashUrl: string | null;
 }) {
   return (
@@ -91,7 +83,7 @@ function Landing({
           className={[
             "mx-auto max-w-6xl px-6",
             "min-h-[calc(100svh-8rem)]", // 64px header + 64px footer
-            "grid md:grid-cols-2 gap-10 items-center", // centers vertically
+            "grid md:grid-cols-2 gap-10 items-center", // vertical centering
           ].join(" ")}
         >
           {/* LEFT: text */}
@@ -142,6 +134,7 @@ function Landing({
 
           {/* RIGHT: free-floating glowing logo (no borders) */}
           <div className="relative mx-auto w-full max-w-[520px] grid place-items-center">
+            {/* halo + beam */}
             <div
               aria-hidden
               className="absolute -inset-10 blur-3xl opacity-70 logo-halo"
@@ -149,6 +142,8 @@ function Landing({
             <div aria-hidden className="absolute -inset-2 rotate-12 opacity-35">
               <div className="logo-beam" />
             </div>
+
+            {/* logo */}
             <Image
               src="/TC_Logo.png"
               alt="True Competency"
@@ -157,6 +152,8 @@ function Landing({
               className="relative z-[1] object-contain drop-shadow-[0_30px_90px_color-mix(in_oklab,var(--accent)_45%,transparent)]"
               priority
             />
+
+            {/* pulsing aura */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0 rounded-[2rem] animate-pulse-glow"
