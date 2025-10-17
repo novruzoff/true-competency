@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 type Competency = {
   id: string;
@@ -30,7 +30,6 @@ type Profile = {
 
 export default function TraineeDashboard() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
 
   const [rows, setRows] = useState<
     Array<ProgressRow & { competency: Competency }>

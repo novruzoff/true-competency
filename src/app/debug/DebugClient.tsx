@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 type DiagRow = {
   name: string;
@@ -31,8 +31,6 @@ const COLORS = {
 };
 
 export default function DebugClient() {
-  const supabase = createClientComponentClient();
-
   const [rows, setRows] = useState<DiagRow[]>([]);
   const [running, setRunning] = useState(false);
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 type Props = {
   transparent?: boolean;
@@ -17,7 +17,6 @@ export default function Header({
   transparent = false,
   hideProfileMenu = false,
 }: Props) {
-  const supabase = createClientComponentClient();
   const router = useRouter();
   const [user, setUser] = useState<UserBrief | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);

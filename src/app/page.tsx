@@ -3,9 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-
-const supabase = createClientComponentClient();
+import { supabase } from "@/lib/supabaseClient";
 
 type UserRole = "trainee" | "instructor" | "committee";
 type Profile = { id: string; role: UserRole };

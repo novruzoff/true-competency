@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 /* ------------------------- Types ------------------------- */
 type Competency = {
@@ -53,7 +53,6 @@ const muted = (ratio = 55) =>
 
 /* --------------------- Page ---------------------- */
 export default function TraineeCompetencyPage() {
-  const supabase = createClientComponentClient();
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const competencyId = params.id;

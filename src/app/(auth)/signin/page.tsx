@@ -1,13 +1,12 @@
-// src/app/(auth)/page.tsx
+// src/app/(auth)/signin/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 type Role = "trainee" | "instructor" | "committee";
-const supabase = createClientComponentClient();
 
 /* ---------------- helpers: profile create/update ---------------- */
 async function ensureProfile({
@@ -103,7 +102,6 @@ function Field({
   placeholder,
   autoComplete,
   required = true,
-  minLength,
 }: {
   label: string;
   type: "text" | "email" | "password";
@@ -112,7 +110,6 @@ function Field({
   placeholder: string;
   autoComplete?: string;
   required?: boolean;
-  minLength?: number;
 }) {
   return (
     <div className="group">
@@ -133,7 +130,6 @@ function Field({
           placeholder={placeholder}
           autoComplete={autoComplete}
           required={required}
-          minLength={minLength}
           className={[
             "w-full rounded-xl px-3 py-2.5 outline-none",
             "bg-transparent text-[var(--foreground)]",
@@ -188,12 +184,12 @@ export default function SignInPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [role, setRole] = useState<Role>("trainee");
 
-  // New fields for signup
+  // Signup extras
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [confirm, setConfirm] = useState("");
 
-  // Shared fields
+  // Shared
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -260,6 +256,7 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
+          // ensure profile exists for legacy users
           await ensureProfile({
             id: data.user.id,
             email: data.user.email ?? email,
@@ -443,20 +440,20 @@ export default function SignInPage() {
                 autoComplete="email"
               />
 
-              {/* Password row:
-                  - Sign up: 2-column (password + confirm)
-                  - Sign in: full-width single field */}
-              {mode === "signup" ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Field
-                    label="Password"
-                    type="password"
-                    value={password}
-                    onChange={setPassword}
-                    placeholder="Create a password"
-                    autoComplete="new-password"
-                    minLength={8}
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={setPassword}
+                  placeholder={
+                    mode === "signup" ? "Create a password" : "Enter password"
+                  }
+                  autoComplete={
+                    mode === "signup" ? "new-password" : "current-password"
+                  }
+                />
+                {mode === "signup" && (
                   <Field
                     label="Confirm password"
                     type="password"
@@ -464,19 +461,9 @@ export default function SignInPage() {
                     onChange={setConfirm}
                     placeholder="Re-enter password"
                     autoComplete="new-password"
-                    minLength={8}
                   />
-                </div>
-              ) : (
-                <Field
-                  label="Password"
-                  type="password"
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="Enter password"
-                  autoComplete="current-password"
-                />
-              )}
+                )}
+              </div>
 
               <button
                 disabled={loading}

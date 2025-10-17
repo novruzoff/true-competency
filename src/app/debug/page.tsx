@@ -1,14 +1,12 @@
 // src/app/debug/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 import DebugClient from "./DebugClient";
 
 export const dynamic = "force-dynamic"; // ensure fresh auth on each request
 
 export default async function DebugPage() {
-  const supabase = createServerComponentClient({ cookies });
-
   const {
     data: { user },
     error: userErr,
