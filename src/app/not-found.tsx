@@ -2,114 +2,96 @@
 "use client";
 
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 
-const fade = {
+const fade: Variants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: 0.35, ease: "easeOut" } },
+  show: {
+    opacity: 1,
+    transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] }, // cubic-bezier
+  },
 };
 
-const rise = (delay = 0) => ({
-  hidden: { opacity: 0, y: 12 },
+const pop: Variants = {
+  hidden: { opacity: 0, y: 8, scale: 0.98 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.45, ease: "easeOut", delay },
+    scale: 1,
+    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
   },
-});
+};
 
-const pop = {
-  hidden: { opacity: 0, scale: 0.9 },
+const shimmer: Variants = {
+  hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    scale: 1,
-    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
+    transition: { delay: 0.2, duration: 0.6, ease: [0.16, 1, 0.3, 1] },
   },
 };
 
 export default function NotFound() {
   return (
     <motion.main
-      className="relative flex min-h-screen flex-col items-center justify-center text-center overflow-hidden"
       initial="hidden"
       animate="show"
       variants={fade}
+      className={[
+        "relative min-h-[calc(100svh-8rem)]", // leave room if your layout has header+footer
+        "flex items-center justify-center",
+        "bg-[var(--background)] text-[var(--foreground)] overflow-hidden",
+      ].join(" ")}
+      role="main"
     >
-      {/* Background layers to match house style */}
+      {/* subtle background speckle to match house style */}
       <div
         aria-hidden
-        className="bg-grid absolute inset-0 opacity-60 dark:opacity-20"
+        className="bg-grid absolute inset-0 opacity-50 dark:opacity-20"
       />
-      <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.06]" />
-      <div aria-hidden className="beams pointer-events-none absolute inset-0" />
+      <div aria-hidden className="bg-noise absolute inset-0 opacity-[0.05]" />
 
-      <section className="relative z-10 px-6">
-        <AnimatePresence>
-          <motion.h1
-            className="text-7xl md:text-8xl font-extrabold text-[var(--accent)] tracking-tight"
-            variants={pop}
+      {/* content */}
+      <motion.div
+        variants={pop}
+        className="relative mx-auto w-full max-w-2xl px-6 text-center"
+      >
+        <div className="mx-auto mb-6 h-1 w-24 rounded-full bg-[color:var(--accent)]/70" />
+        <h1 className="text-6xl md:text-7xl font-extrabold tracking-tight">
+          404
+        </h1>
+
+        <motion.p
+          variants={shimmer}
+          className="mt-4 text-base md:text-lg text-[var(--muted)]"
+        >
+          The page you’re looking for doesn’t exist or has moved.
+        </motion.p>
+
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <Link
+            href="/"
+            className="rounded-xl px-5 py-2.5 font-semibold btn-primary bg-[var(--accent)] shadow-[0_10px_24px_color-mix(in_oklab,var(--accent)_26%,transparent)] hover:opacity-95"
           >
-            404
-          </motion.h1>
-
-          <motion.h2
-            className="mt-4 text-2xl md:text-3xl font-semibold tracking-tight"
-            variants={rise(0.05)}
+            <span className="!text-white">Go home</span>
+          </Link>
+          <Link
+            href="/signin"
+            className="rounded-xl border border-[var(--border)] px-5 py-2.5 font-semibold text-[var(--foreground)] hover:bg-[color:var(--surface)]/60"
           >
-            Page not found
-          </motion.h2>
+            Sign in
+          </Link>
+        </div>
+      </motion.div>
 
-          <motion.p
-            className="mt-3 max-w-lg mx-auto text-[var(--muted)] text-sm md:text-base leading-relaxed"
-            variants={rise(0.12)}
-          >
-            The page you’re looking for doesn’t exist, was removed, or is
-            temporarily unavailable.
-          </motion.p>
-
-          <motion.div
-            className="mt-8 flex flex-wrap justify-center gap-4"
-            variants={{
-              hidden: { opacity: 0 },
-              show: {
-                opacity: 1,
-                transition: { staggerChildren: 0.08, delayChildren: 0.18 },
-              },
-            }}
-          >
-            <motion.span variants={rise(0)}>
-              <Link
-                href="/"
-                className="rounded-2xl px-6 py-3 font-semibold bg-[var(--accent)] text-white
-                           shadow-[0_8px_30px_color-mix(in_oklab,var(--accent)_25%,transparent)]
-                           hover:opacity-95 active:opacity-90 transition"
-              >
-                Go Home
-              </Link>
-            </motion.span>
-
-            <motion.span variants={rise(0)}>
-              <Link
-                href="/signin"
-                className="rounded-2xl border border-[var(--border)] px-6 py-3 font-semibold
-                           text-[var(--foreground)] hover:bg-[color:var(--surface)]/60 transition"
-              >
-                Sign In
-              </Link>
-            </motion.span>
-
-            <motion.span variants={rise(0)}>
-              <a
-                href="mailto:novruzoff@truecompetency.com?subject=Broken%20link%20on%20True%20Competency"
-                className="rounded-2xl border border-[var(--border)] px-6 py-3 font-semibold
-                           text-[var(--foreground)] hover:bg-[color:var(--surface)]/60 transition"
-              >
-                Report Issue
-              </a>
-            </motion.span>
-          </motion.div>
-        </AnimatePresence>
-      </section>
+      {/* gentle accent glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -z-10 -inset-[15%] blur-3xl"
+        style={{
+          background:
+            "radial-gradient(40rem 40rem at 50% 60%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 60%)",
+        }}
+      />
     </motion.main>
   );
 }
