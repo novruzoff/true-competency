@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { ChevronAction } from "@/components/ui/ChevronAction";
@@ -122,7 +121,7 @@ export default function TraineeDashboard() {
             .limit(500)
             .returns<AnswerRow[]>();
 
-          let lastByCompetency = new Map<string, string>();
+          const lastByCompetency = new Map<string, string>();
           if (recentAns && recentAns.length) {
             const qids = Array.from(
               new Set(recentAns.map((a) => a.question_id))

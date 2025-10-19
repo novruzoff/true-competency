@@ -1,3 +1,4 @@
+// src/app/instructor/page.client.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,7 +14,7 @@ type TraineeProfile = {
   role: string;
 };
 
-type ProgressRow = { student_id: string; pct: number; competency_id?: string };
+type ProgressRow = { student_id: string; pct: number };
 type AssignRow = {
   student_id: string;
   competency_id: string;
@@ -107,7 +108,6 @@ export default function InstructorClient() {
           [t.first_name ?? "", t.last_name ?? ""].join(" ").trim() ||
           "Unnamed trainee";
 
-        // base
         const baseStudents: StudentRow[] = (pRows ?? []).map((t) => ({
           id: t.id,
           name: nameFor(t),
@@ -120,8 +120,8 @@ export default function InstructorClient() {
         }));
 
         // 2) Aggregates: progress (avg + completedCount)
-        let avgById = new Map<string, { sum: number; count: number }>();
-        let completedById = new Map<string, number>();
+        const avgById = new Map<string, { sum: number; count: number }>();
+        const completedById = new Map<string, number>();
 
         if (traineeIds.length > 0) {
           const { data: progress, error: prErr } = await supabase
@@ -146,7 +146,7 @@ export default function InstructorClient() {
         }
 
         // 3) Total assignedCount from competency_assignments
-        let assignedById = new Map<string, number>();
+        const assignedById = new Map<string, number>();
         if (traineeIds.length > 0) {
           const { data: assigns, error: aErr } = await supabase
             .from("competency_assignments")
@@ -164,12 +164,16 @@ export default function InstructorClient() {
         }
 
         // 4) Answers aggregate for assessments & last date
-        let answersById = new Map<
+        const answersById = new Map<
           string,
           { count: number; last: string | null }
         >();
         if (traineeIds.length > 0) {
-          const { data: answers, error: ansErr } = await supabase
+          const {
+            data: answers,
+            error: ansErr,
+            count: _,
+          } = await supabase
             .from("student_answers")
             .select("student_id, answered_at")
             .in("student_id", traineeIds)
@@ -186,7 +190,7 @@ export default function InstructorClient() {
         }
 
         // 5) Merge
-        let merged: StudentRow[] = baseStudents.map((s) => {
+        const merged: StudentRow[] = baseStudents.map((s) => {
           const agg = avgById.get(s.id);
           const avgPct =
             agg && agg.count > 0 ? Math.round(agg.sum / agg.count) : 0;
@@ -232,11 +236,12 @@ export default function InstructorClient() {
           const monthStart = new Date();
           monthStart.setDate(1);
 
-          const { data: pending } = await supabase
+          // Pending (is_correct is null)
+          const { count: pendingCount } = await supabase
             .from("student_answers")
             .select("question_id", { head: true, count: "exact" })
             .is("is_correct", null);
-          setKpiPendingAssessments((pending as any)?.length ?? 0);
+          setKpiPendingAssessments(pendingCount ?? 0);
 
           const avgProg =
             merged.length > 0
@@ -247,11 +252,12 @@ export default function InstructorClient() {
               : 0;
           setKpiAvgProgramScore(avgProg);
 
-          const { data: thisMonth } = await supabase
+          // This month assessments
+          const { count: monthCount } = await supabase
             .from("student_answers")
             .select("question_id", { head: true, count: "exact" })
             .gte("answered_at", monthStart.toISOString());
-          setKpiThisMonthAssessments((thisMonth as any)?.length ?? 0);
+          setKpiThisMonthAssessments(monthCount ?? 0);
         }
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
@@ -889,7 +895,7 @@ function KPI({
   sub,
 }: {
   title: string;
-  value: any;
+  value: number | string;
   sub?: string;
 }) {
   return (
