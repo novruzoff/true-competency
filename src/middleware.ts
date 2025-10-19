@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 const PUBLIC_PATHS = [
   "/signin",
   "/signup",
-  "/debug", // make protected later if you want
+  "/debug",
   "/api/auth/callback",
   "/preview-check",
   "/api/health",
@@ -19,7 +19,7 @@ const PROTECT_PREFIXES = ["/trainee", "/instructor", "/committee"];
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Allow static & public paths
+  // Let Next internals & public routes straight through
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/assets") ||
@@ -31,19 +31,19 @@ export async function middleware(req: NextRequest) {
   }
 
   const needsAuth = PROTECT_PREFIXES.some((p) => pathname.startsWith(p));
+  if (!needsAuth) return NextResponse.next(); // no auth check needed
+
   const res = NextResponse.next();
 
-  // Standardized SSR client with getAll/setAll on req/res cookies
+  // Use getAll/setAll so Supabase can refresh/rotate cookies server-side
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return req.cookies.getAll().map(({ name, value }) => ({ name, value }));
-        },
-        setAll(cookiesToSet) {
-          for (const { name, value, options } of cookiesToSet) {
+        getAll: () => req.cookies.getAll(),          // pass through as-is
+        setAll: (cookies) => {                        // write every cookie to the response
+          for (const { name, value, options } of cookies) {
             res.cookies.set(name, value, options);
           }
         },
@@ -51,12 +51,11 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // This call both verifies and silently refreshes session cookies when needed
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (needsAuth && !user) {
+  if (!user) {
     const url = req.nextUrl.clone();
     url.pathname = "/signin";
     url.searchParams.set("redirect", pathname);

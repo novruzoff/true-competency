@@ -1,54 +1,33 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+// src/lib/ensureProfile.ts
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-type AppRole = "trainee" | "instructor" | "committee";
+export type AppRole = "trainee" | "instructor" | "committee";
 
-export type ProfileRow = {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  role: AppRole;
-  // include other columns if you have them (e.g., is_admin)
-};
-
-/**
- * Ensures a `profiles` row exists for the current user.
- * - If missing, inserts with sensible defaults.
- * - If present, returns it.
- * Never throws on "row missing"—only on network/permission errors.
- */
 export async function ensureProfile(
-  supabase: SupabaseClient
-): Promise<ProfileRow | null> {
-  // Get current user
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) throw authErr;
+  supabase: SupabaseClient,
+  role: AppRole = "trainee"
+) {
+  // who am I?
+  const { data: u, error: uErr } = await supabase.auth.getUser();
+  if (uErr) throw uErr;
+  if (!u.user) return null;
 
-  const user: User | null = authData.user ?? null;
-  if (!user) return null;
+  // one call, idempotent
+  const { data: _, error: rpcErr } = await supabase.rpc("ensure_profile_rpc", {
+    p_email: u.user.email ?? null,
+    p_role: role,
+    p_first_name: u.user.user_metadata?.first_name ?? null,
+    p_last_name:  u.user.user_metadata?.last_name ?? null,
+  });
+  if (rpcErr) throw rpcErr;
 
-  // Try to read existing profile
-  const { data: existing, error: selErr } = await supabase
+  // fetch fresh profile (optional)
+  const { data: prof, error: selErr } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role")
-    .eq("id", user.id)
-    .maybeSingle<ProfileRow>();
-
+    .select("id, email, full_name, first_name, last_name, role, created_at")
+    .eq("id", u.user.id)
+    .maybeSingle();
   if (selErr) throw selErr;
-  if (existing) return existing;
 
-  // Insert a new profile with defaults
-  const defaultRole: AppRole = "trainee";
-  const { data: inserted, error: insErr } = await supabase
-    .from("profiles")
-    .insert({
-      id: user.id,
-      email: user.email ?? null,
-      full_name: null,
-      role: defaultRole,
-    })
-    .select("id, email, full_name, role")
-    .single<ProfileRow>();
-
-  if (insErr) throw insErr;
-  return inserted;
+  return prof ?? null;
 }

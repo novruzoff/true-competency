@@ -5,67 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { ensureProfile } from "@/lib/ensureProfile";
 
 type Role = "trainee" | "instructor" | "committee";
-
-/* ---------------- helpers: profile create/update ---------------- */
-async function ensureProfile({
-  id,
-  email,
-  role,
-  first_name,
-  last_name,
-}: {
-  id: string;
-  email: string | null;
-  role: Role;
-  first_name?: string;
-  last_name?: string;
-}) {
-  const { data: existing, error: selErr } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", id)
-    .maybeSingle();
-  if (selErr) throw selErr;
-  if (existing) {
-    if (first_name || last_name) {
-      await supabase
-        .from("profiles")
-        .update({
-          first_name: first_name ?? null,
-          last_name: last_name ?? null,
-          full_name:
-            first_name || last_name
-              ? `${first_name ?? ""} ${last_name ?? ""}`.trim()
-              : null,
-        })
-        .eq("id", id);
-    }
-    return;
-  }
-
-  const { error: insErr } = await supabase.from("profiles").insert({
-    id,
-    email: email ?? "",
-    role,
-    first_name: first_name ?? null,
-    last_name: last_name ?? null,
-    full_name:
-      first_name || last_name
-        ? `${first_name ?? ""} ${last_name ?? ""}`.trim()
-        : null,
-  });
-  if (insErr) throw insErr;
-}
-
-async function setProfileRole(userId: string, role: Role) {
-  const { error } = await supabase
-    .from("profiles")
-    .update({ role })
-    .eq("id", userId);
-  if (error) throw error;
-}
 
 /* ---------------- UI bits ---------------- */
 function RoleChip({
@@ -173,6 +115,7 @@ const ROLE_INFO: Record<Role, { title: string; points: string[] }> = {
 export default function SignInPage() {
   const router = useRouter();
   const [redirect, setRedirect] = useState<string>("/");
+
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
@@ -209,6 +152,25 @@ export default function SignInPage() {
     return null;
   }
 
+  function showError(e: unknown) {
+    if (typeof e === "object" && e && "message" in e) {
+      const err = e as {
+        message?: string;
+        error_description?: string;
+        details?: string;
+      };
+      const text =
+        [err.message, err.error_description, err.details]
+          .filter(Boolean)
+          .join(" — ") || "Something went wrong";
+      console.error("Auth error:", e);
+      setMsg(text);
+    } else {
+      console.error("Auth error (unknown):", e);
+      setMsg("Something went wrong");
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
@@ -222,6 +184,7 @@ export default function SignInPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
+        // Create auth user
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -236,19 +199,28 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
-          await ensureProfile({
-            id: data.user.id,
-            email: data.user.email ?? email,
-            role,
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-          });
-          await setProfileRole(data.user.id, role);
+          // Ensure a single profile row exists (idempotent, safe)
+          await ensureProfile(supabase);
+
+          // Set role + names on profile (separate update keeps helper simple)
+          const fullName =
+            `${firstName.trim()} ${lastName.trim()}`.trim() || null;
+          const { error: updErr } = await supabase
+            .from("profiles")
+            .update({
+              role,
+              first_name: firstName.trim() || null,
+              last_name: lastName.trim() || null,
+              full_name: fullName,
+            })
+            .eq("id", data.user.id);
+          if (updErr) throw updErr;
         }
 
         setMsg("Account created. You can now sign in.");
         setMode("signin");
       } else {
+        // Sign in (supporting legacy <8 char passwords)
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -256,18 +228,18 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
-          // ensure profile exists for legacy users
-          await ensureProfile({
-            id: data.user.id,
-            email: data.user.email ?? email,
-            role: "trainee",
-          });
+          // Ensure profile exists for legacy users
+          await ensureProfile(supabase);
+
+          // Hydrate session before navigating (avoids race on first SSR page)
+          await supabase.auth.getSession();
+          await new Promise((r) => setTimeout(r, 0));
           router.replace(redirect || "/");
           return;
         }
       }
-    } catch (err: unknown) {
-      setMsg(err instanceof Error ? err.message : "Something went wrong");
+    } catch (err) {
+      showError(err);
     } finally {
       setLoading(false);
     }
