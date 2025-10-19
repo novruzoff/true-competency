@@ -10,8 +10,9 @@
   --foreground: #0a0a0a;
   --accent: #5170ff;
   --border: #e5e7eb;
-  --ok: #22c55e; /* keep your greens/reds for statuses */
-  --err: #ef4444;
+  --ok: #34d399; /* success green */
+  --err: #fb7185; /* error red */
+  --warn: #facc15; /* warning yellow (for intermediate) */
 }
 
 /* Add to globals.css (after your existing :root) */
@@ -21,7 +22,9 @@
   --muted: #6b7280;
 }
 
-/* Class-based dark theme override (applies when <html class="dark">) */
+/* -----------------------------
+   Dark theme (via .dark class)
+------------------------------*/
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
@@ -32,15 +35,16 @@
 }
 
 /* -----------------------------
-   Dark theme (via .dark class)
+   Dark theme variables (sync)
 ------------------------------*/
 :root.dark {
   --background: #0a0a0a;
   --foreground: #ededed;
-  --accent: #5170ff; /* same accent */
+  --accent: #5170ff;
   --border: #1f232a;
-  --ok: #22c55e;
-  --err: #ef4444;
+  --ok: #34d399; /* success green */
+  --err: #fb7185; /* error red */
+  --warn: #eab308; /* slightly deeper yellow for dark mode */
 }
 
 /* Bridge vars into Tailwind inline theme tokens */
@@ -51,6 +55,7 @@
   --color-border: var(--border);
   --color-ok: var(--ok);
   --color-err: var(--err);
+  --color-warn: var(--warn);
 }
 
 /* Base */
