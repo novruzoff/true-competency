@@ -6,22 +6,19 @@ import InstructorClient from "./page.client";
 export default async function InstructorPage() {
   const supabase = await getSupabaseServer();
 
-  // Secure auth check (contacts Auth server)
-  const { data: userRes } = await supabase.auth.getUser();
-  const user = userRes?.user;
-  if (!user) {
-    redirect("/signin?redirect=/instructor");
-  }
+  // Auth (verifies with Auth server)
+  const { data: u } = await supabase.auth.getUser();
+  const user = u?.user;
+  if (!user) redirect("/signin?redirect=/instructor");
 
-  // Role/Admin gate
-  const { data: profile } = await supabase
+  // Role/Admin gate: allow instructor or app_admin
+  const { data: prof } = await supabase
     .from("profiles")
-    .select("role, is_admin")
+    .select("role")
     .eq("id", user.id)
     .maybeSingle();
 
-  let isAdmin = !!profile?.is_admin;
-
+  let isAdmin = false;
   if (!isAdmin) {
     const { data: adminRow } = await supabase
       .from("app_admins")
@@ -31,7 +28,7 @@ export default async function InstructorPage() {
     isAdmin = !!adminRow;
   }
 
-  if (!isAdmin && profile?.role !== "instructor") {
+  if (!isAdmin && prof?.role !== "instructor") {
     redirect("/403");
   }
 

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { ChevronAction } from "@/components/ui/ChevronAction";
 
 type Competency = {
   id: string;
@@ -28,11 +29,16 @@ type Profile = {
   role: "trainee" | "instructor" | "committee" | "student" | "doctor";
 };
 
+type AnswerRow = { question_id: string; answered_at: string };
+type QuestionRow = { id: string; competency_id: string };
+
 export default function TraineeDashboard() {
   const router = useRouter();
 
   const [rows, setRows] = useState<
-    Array<ProgressRow & { competency: Competency }>
+    Array<
+      ProgressRow & { competency: Competency; last_answered_at?: string | null }
+    >
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string | null>(null);
@@ -40,8 +46,13 @@ export default function TraineeDashboard() {
     boolean | null
   >(null);
 
-  // For the streak widget
+  // For widgets
   const [streakDays, setStreakDays] = useState<number>(0);
+
+  // Not-started difficulty filter
+  const [notStartedFilter, setNotStartedFilter] = useState<
+    "all" | "beginner" | "intermediate" | "expert"
+  >("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +63,6 @@ export default function TraineeDashboard() {
       setCompetenciesVisible(null);
 
       try {
-        // who am I
         const { data: userRes, error: getUserErr } =
           await supabase.auth.getUser();
         if (getUserErr) throw getUserErr;
@@ -63,7 +73,6 @@ export default function TraineeDashboard() {
           return;
         }
 
-        // ensure profile exists & grab id
         const { data: prof, error: profErr } = await supabase
           .from("profiles")
           .select("id, role")
@@ -72,7 +81,6 @@ export default function TraineeDashboard() {
         if (profErr) throw profErr;
         if (cancelled) return;
 
-        // progress rows (fast, single table)
         const { data: progress, error: progErr } = await supabase
           .from("student_competency_progress")
           .select(
@@ -83,11 +91,11 @@ export default function TraineeDashboard() {
         if (cancelled) return;
 
         const progressRows: ProgressRow[] = (progress ?? []) as ProgressRow[];
+
         if (progressRows.length === 0) {
           setRows([]);
           setCompetenciesVisible(true);
         } else {
-          // fetch competency meta for visible cards
           const ids = Array.from(
             new Set(progressRows.map((r) => r.competency_id))
           );
@@ -105,27 +113,54 @@ export default function TraineeDashboard() {
             compMap = new Map(list.map((c) => [c.id, c]));
           }
 
-          const merged = progressRows
-            .map((r) => ({
-              ...r,
-              competency: compMap.get(r.competency_id) ?? {
-                id: r.competency_id,
-                name: null,
-                difficulty: null,
-                tags: null,
-              },
-            }))
-            .sort((a, b) => {
-              if (a.pct !== b.pct) return a.pct - b.pct;
-              const an = a.competency.name ?? a.competency.id;
-              const bn = b.competency.name ?? b.competency.id;
-              return an.localeCompare(bn);
-            });
+          // recent answers → last activity per competency
+          const { data: recentAns } = await supabase
+            .from("student_answers")
+            .select("question_id, answered_at")
+            .eq("student_id", prof.id)
+            .order("answered_at", { ascending: false })
+            .limit(500)
+            .returns<AnswerRow[]>();
+
+          let lastByCompetency = new Map<string, string>();
+          if (recentAns && recentAns.length) {
+            const qids = Array.from(
+              new Set(recentAns.map((a) => a.question_id))
+            );
+            const { data: qMeta } = await supabase
+              .from("competency_questions")
+              .select("id, competency_id")
+              .in("id", qids)
+              .returns<QuestionRow[]>();
+
+            const qToComp = new Map<string, string>();
+            (qMeta ?? []).forEach((q) => qToComp.set(q.id, q.competency_id));
+
+            for (const a of recentAns) {
+              const cid = qToComp.get(a.question_id);
+              if (!cid) continue;
+              const prev = lastByCompetency.get(cid);
+              if (!prev || new Date(a.answered_at) > new Date(prev)) {
+                lastByCompetency.set(cid, a.answered_at);
+              }
+            }
+          }
+
+          const merged = progressRows.map((r) => ({
+            ...r,
+            competency: compMap.get(r.competency_id) ?? {
+              id: r.competency_id,
+              name: null,
+              difficulty: null,
+              tags: null,
+            },
+            last_answered_at: lastByCompetency.get(r.competency_id) ?? null,
+          }));
 
           setRows(merged);
         }
 
-        // Lightweight streak: last 30 days with answers → contiguous days up to today
+        // Streak: last 30 days
         const { data: recent, error: ansErr } = await supabase
           .from("student_answers")
           .select("answered_at")
@@ -168,7 +203,7 @@ export default function TraineeDashboard() {
     };
   }, [router]);
 
-  // --- KPIs derived from current rows (no extra requests) ---
+  // --- KPIs derived from current rows ---
   const totalAssigned = rows.length;
 
   const totals = useMemo(() => {
@@ -191,6 +226,49 @@ export default function TraineeDashboard() {
     () => rows.filter((r) => (r.pct ?? 0) >= 100).length,
     [rows]
   );
+
+  // --- Active vs Not Started ---
+  const activeRows = useMemo(() => {
+    return rows
+      .filter((r) => (r.answered_questions ?? 0) > 0)
+      .slice()
+      .sort((a, b) => {
+        const at = a.last_answered_at
+          ? new Date(a.last_answered_at).getTime()
+          : 0;
+        const bt = b.last_answered_at
+          ? new Date(b.last_answered_at).getTime()
+          : 0;
+        if (bt !== at) return bt - at;
+        const an = (a.competency.name ?? a.competency.id).toLowerCase();
+        const bn = (b.competency.name ?? b.competency.id).toLowerCase();
+        return an.localeCompare(bn);
+      });
+  }, [rows]);
+
+  const notStartedRows = useMemo(() => {
+    let list = rows.filter((r) => (r.answered_questions ?? 0) === 0);
+    if (notStartedFilter !== "all") {
+      list = list.filter(
+        (r) =>
+          (r.competency.difficulty ?? "").toLowerCase() === notStartedFilter
+      );
+    }
+    return list.slice().sort((a, b) => {
+      const an = (a.competency.name ?? a.competency.id).toLowerCase();
+      const bn = (b.competency.name ?? b.competency.id).toLowerCase();
+      return an.localeCompare(bn);
+    });
+  }, [rows, notStartedFilter]);
+
+  // UI helpers
+  const badgeBg = (diff: string | null | undefined) => {
+    const k = (diff ?? "").toLowerCase();
+    if (k === "beginner") return "var(--ok)";
+    if (k === "intermediate") return "var(--warn)";
+    if (k === "expert") return "var(--err)";
+    return "var(--border)";
+  };
 
   return (
     <main className="bg-[var(--background)] text-[var(--foreground)] transition-colors">
@@ -263,22 +341,21 @@ export default function TraineeDashboard() {
         )}
       </section>
 
-      {/* Currently Learning */}
-      <section className="mx-auto max-w-6xl px-6 pb-10">
+      {/* ACTIVE (recently worked) */}
+      <section className="mx-auto max-w-6xl px-6 pb-8">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
-            <span className="i-lucide-radar" aria-hidden />
-            Currently Learning
+            Active — Recently worked
           </h2>
         </div>
 
         {loading && <div className="text-[var(--muted)]">Loading…</div>}
-        {!loading && rows.length === 0 && !err && (
-          <div className="text-[var(--muted)]">No assignments yet.</div>
+        {!loading && activeRows.length === 0 && !err && (
+          <div className="text-[var(--muted)]">No active topics yet.</div>
         )}
 
         <div className="space-y-3">
-          {rows.map((r) => {
+          {activeRows.map((r) => {
             const title =
               r.competency.name ?? `Topic ${r.competency.id.slice(0, 8)}…`;
             const pct = Math.max(0, Math.min(100, Math.round(r.pct ?? 0)));
@@ -289,47 +366,45 @@ export default function TraineeDashboard() {
             const diffRaw = (r.competency.difficulty ?? "").trim();
             const diff = diffRaw.toLowerCase();
 
-            // Map difficulty to status colors; ALWAYS black text for readability
-            const badgeBg =
-              diff === "beginner"
-                ? "var(--ok)"
-                : diff === "intermediate"
-                ? "var(--warn)"
-                : diff === "expert"
-                ? "var(--err)"
-                : "var(--border)";
-
             return (
               <article
                 key={r.competency_id}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm hover:shadow-md transition"
+                className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm hover:shadow-md transition"
               >
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    {/* Title & Difficulty */}
-                    <div className="flex items-center gap-2">
+                    {/* Title row padded so it never runs beneath chevron */}
+                    <div className="flex items-center gap-2 pe-12 md:pe-14">
                       <h3 className="font-semibold leading-tight truncate">
                         {title}
                       </h3>
                       {diff && (
                         <span
                           className="text-[10px] font-semibold rounded-full px-2 py-0.5"
-                          style={{ background: badgeBg, color: "#000" }}
+                          style={{ background: badgeBg(diff), color: "#000" }}
                         >
                           {diffRaw}
                         </span>
                       )}
                     </div>
 
-                    {/* Progress row */}
-                    <div className="mt-3 flex items-center justify-between text-xs">
+                    {/* meta row */}
+                    <div className="mt-2 text-xs text-[var(--muted)]">
+                      {r.last_answered_at
+                        ? `Last worked: ${new Date(
+                            r.last_answered_at
+                          ).toLocaleString()}`
+                        : "Recently started"}
+                    </div>
+
+                    {/* progress */}
+                    <div className="mt-2 flex items-center justify-between text-xs">
                       <span className="text-[var(--muted)]">Progress</span>
                       <span className="text-[var(--foreground)]">
                         {r.answered_questions}/{r.total_questions} cases ({pct}
                         %)
                       </span>
                     </div>
-
                     <div className="mt-1 h-[6px] w-full overflow-hidden rounded-full bg-[var(--field)] border border-[var(--border)]">
                       <div
                         className="h-full"
@@ -342,7 +417,6 @@ export default function TraineeDashboard() {
                       />
                     </div>
 
-                    {/* Needed line */}
                     <div className="mt-2 text-xs text-[var(--muted)]">
                       {needed > 0 ? (
                         <span>
@@ -353,7 +427,6 @@ export default function TraineeDashboard() {
                       )}
                     </div>
 
-                    {/* Tags */}
                     {!!r.competency.tags?.length && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {r.competency.tags!.slice(0, 6).map((t) => (
@@ -363,28 +436,101 @@ export default function TraineeDashboard() {
                     )}
                   </div>
 
-                  {/* Chevron action */}
-                  <Link
+                  {/* open */}
+                  <ChevronAction
                     href={`/trainee/competency/${r.competency_id}`}
-                    className="shrink-0 mt-1 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--field)] hover:bg-[var(--surface)]"
+                    variant="accent"
+                    className="absolute top-3 right-3"
                     title="Open"
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden
-                    >
-                      <path
-                        d="M9 18l6-6-6-6"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </Link>
+                  />
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* NOT STARTED */}
+      <section className="mx-auto max-w-6xl px-6 pb-10">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg md:text-xl font-semibold">Not Started</h2>
+
+          {/* Difficulty filter */}
+          <div className="flex items-center gap-2 text-xs">
+            <FilterChip
+              label="All"
+              active={notStartedFilter === "all"}
+              onClick={() => setNotStartedFilter("all")}
+            />
+            <FilterChip
+              label="Beginner"
+              color="var(--ok)"
+              active={notStartedFilter === "beginner"}
+              onClick={() => setNotStartedFilter("beginner")}
+            />
+            <FilterChip
+              label="Intermediate"
+              color="var(--warn)"
+              active={notStartedFilter === "intermediate"}
+              onClick={() => setNotStartedFilter("intermediate")}
+            />
+            <FilterChip
+              label="Expert"
+              color="var(--err)"
+              active={notStartedFilter === "expert"}
+              onClick={() => setNotStartedFilter("expert")}
+            />
+          </div>
+        </div>
+
+        {!loading && notStartedRows.length === 0 && !err && (
+          <div className="text-[var(--muted)] text-sm">
+            No items match this filter.
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {notStartedRows.map((r) => {
+            const title =
+              r.competency.name ?? `Topic ${r.competency.id.slice(0, 8)}…`;
+            const diffRaw = (r.competency.difficulty ?? "").trim();
+            const diff = diffRaw.toLowerCase();
+
+            return (
+              <article
+                key={`ns_${r.competency_id}`}
+                className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    {/* Title row padded so it never runs beneath chevron */}
+                    <div className="pe-12 md:pe-14">
+                      <h3 className="font-semibold leading-tight truncate">
+                        {title}
+                      </h3>
+                    </div>
+                    {diff && (
+                      <span
+                        className="mt-1 inline-block text-[10px] font-semibold rounded-full px-2 py-0.5"
+                        style={{ background: badgeBg(diff), color: "#000" }}
+                      >
+                        {diffRaw}
+                      </span>
+                    )}
+                    {!!r.competency.tags?.length && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {r.competency.tags!.slice(0, 6).map((t) => (
+                          <Tag key={t}>{t}</Tag>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronAction
+                    href={`/trainee/competency/${r.competency_id}`}
+                    variant="neutral"
+                    className="absolute top-3 right-3"
+                    title="Start"
+                  />
                 </div>
               </article>
             );
@@ -447,5 +593,37 @@ function Tag({ children }: { children: React.ReactNode }) {
     <span className="text-[10px] rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[var(--foreground)]/80">
       {children}
     </span>
+  );
+}
+
+function FilterChip({
+  label,
+  onClick,
+  active,
+  color,
+}: {
+  label: string;
+  onClick: () => void;
+  active: boolean;
+  color?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "px-3 py-1.5 rounded-full border text-xs font-medium transition",
+        active
+          ? "shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
+          : "",
+      ].join(" ")}
+      style={{
+        borderColor: "var(--border)",
+        background: active ? color ?? "var(--field)" : "var(--surface)",
+        color: active ? "#000" : "var(--foreground)",
+      }}
+    >
+      {label}
+    </button>
   );
 }
