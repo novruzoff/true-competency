@@ -84,6 +84,92 @@ function Field({
   );
 }
 
+/** Password field with show/hide toggle (full width) */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+  required = true,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  autoComplete?: string;
+  required?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="group">
+      <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+        {label}
+      </label>
+      <div
+        className={[
+          "relative rounded-xl border bg-[var(--field)] border-[var(--border)]",
+          "focus-within:border-[color:var(--accent)]",
+          "transition-colors",
+        ].join(" ")}
+      >
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          required={required}
+          className={[
+            "w-full rounded-xl pl-3 pr-10 py-2.5 outline-none",
+            "bg-transparent text-[var(--foreground)]",
+            "placeholder:[color:var(--muted)]",
+          ].join(" ")}
+        />
+        <button
+          type="button"
+          aria-label={show ? "Hide password" : "Show password"}
+          onClick={() => setShow((s) => !s)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]/80 hover:bg-[var(--field)]"
+        >
+          {show ? (
+            // Eye-off
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 001.42-.38M9.88 5.08A10.94 10.94 0 0112 5c5 0 9.27 3.11 11 7- .41.94-1 1.8-1.7 2.57M6.53 6.53C4.2 7.86 2.54 9.74 1 12c.64 1.17 1.5 2.24 2.53 3.17A11.22 11.22 0 0012 19c1.3 0 2.55-.2 3.72-.58"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            // Eye
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="3"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+            </svg>
+          )}
+        </button>
+
+        <span className="pointer-events-none absolute inset-x-0 -bottom-0.5 h-[2px] rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity glow-accent" />
+      </div>
+    </div>
+  );
+}
+
 const ROLE_INFO: Record<Role, { title: string; points: string[] }> = {
   trainee: {
     title: "Trainee — Build your competency portfolio",
@@ -184,7 +270,6 @@ export default function SignInPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        // Create auth user
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -199,10 +284,7 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
-          // Ensure a single profile row exists (idempotent, safe)
           await ensureProfile(supabase);
-
-          // Set role + names on profile (separate update keeps helper simple)
           const fullName =
             `${firstName.trim()} ${lastName.trim()}`.trim() || null;
           const { error: updErr } = await supabase
@@ -220,7 +302,6 @@ export default function SignInPage() {
         setMsg("Account created. You can now sign in.");
         setMode("signin");
       } else {
-        // Sign in (supporting legacy <8 char passwords)
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -228,10 +309,7 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
-          // Ensure profile exists for legacy users
           await ensureProfile(supabase);
-
-          // Hydrate session before navigating (avoids race on first SSR page)
           await supabase.auth.getSession();
           await new Promise((r) => setTimeout(r, 0));
           router.replace(redirect || "/");
@@ -403,6 +481,7 @@ export default function SignInPage() {
                 </div>
               )}
 
+              {/* Email (full width) */}
               <Field
                 label="Email Address"
                 type="email"
@@ -412,30 +491,29 @@ export default function SignInPage() {
                 autoComplete="email"
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field
-                  label="Password"
-                  type="password"
-                  value={password}
-                  onChange={setPassword}
-                  placeholder={
-                    mode === "signup" ? "Create a password" : "Enter password"
-                  }
-                  autoComplete={
-                    mode === "signup" ? "new-password" : "current-password"
-                  }
+              {/* Password (full width) */}
+              <PasswordField
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                placeholder={
+                  mode === "signup" ? "Create a password" : "Enter password"
+                }
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
+              />
+
+              {/* Confirm (signup only, full width) */}
+              {mode === "signup" && (
+                <PasswordField
+                  label="Confirm password"
+                  value={confirm}
+                  onChange={setConfirm}
+                  placeholder="Re-enter password"
+                  autoComplete="new-password"
                 />
-                {mode === "signup" && (
-                  <Field
-                    label="Confirm password"
-                    type="password"
-                    value={confirm}
-                    onChange={setConfirm}
-                    placeholder="Re-enter password"
-                    autoComplete="new-password"
-                  />
-                )}
-              </div>
+              )}
 
               <button
                 disabled={loading}
