@@ -154,12 +154,12 @@ export default function Header({
                   {user ? (
                     <>
                       <Link
-                        href="/profile"
+                        href="/account"
                         role="menuitem"
                         className="block px-3 py-2 text-sm transition-colors hover:bg-[var(--accent)] hover:text-white"
                         onClick={() => setMenuOpen(false)}
                       >
-                        Profile
+                        Account
                       </Link>
                       <Link
                         href="/settings"
