@@ -131,12 +131,14 @@ export default function PrivacyPage() {
         <p>
           If you have questions or requests regarding your personal data, please
           contact us at:
-        </p>
-        <p>
-          True Competency
+          <br />
+          <strong>True Competency</strong>
           <br />
           Email:{" "}
-          <a href="mailto:novruzoff@truecompetency.com">
+          <a
+            href="mailto:novruzoff@truecompetency.com"
+            className="text-[var(--accent)] underline"
+          >
             novruzoff@truecompetency.com
           </a>
         </p>
