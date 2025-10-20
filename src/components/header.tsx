@@ -1,9 +1,10 @@
+// src/components/header.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type Props = {
@@ -18,11 +19,14 @@ export default function Header({
   hideProfileMenu = false,
 }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
+
   const [user, setUser] = useState<UserBrief | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
+  // Load user once
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -34,8 +38,18 @@ export default function Header({
     return () => {
       mounted = false;
     };
-  }, [supabase]);
+  }, []); // ← no supabase in deps (prevents linter warning)
 
+  // React to auth changes (keeps pill + menu state correct)
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      const email = session?.user?.email ?? null;
+      setUser(email ? { email } : null);
+    });
+    return () => sub?.subscription?.unsubscribe();
+  }, []);
+
+  // Close menu on outside click / escape
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!menuOpen) return;
@@ -70,6 +84,9 @@ export default function Header({
   async function handleSignOut() {
     await supabase.auth.signOut();
     setMenuOpen(false);
+    // Immediate redirect to signin (preserve where the user was)
+    const redir = encodeURIComponent(pathname || "/");
+    router.replace(`/signin?redirect=${redir}`);
     router.refresh();
   }
 
@@ -80,7 +97,7 @@ export default function Header({
   return (
     <header
       className={`sticky top-0 z-50 border-b border-[var(--border)] ${baseBg}`}
-      style={{ height: "64px" }} // standard appbar height
+      style={{ height: "64px" }}
     >
       <div className="mx-auto max-w-7xl px-6 flex items-center justify-between h-full">
         {/* Left: Logo + name */}
@@ -139,7 +156,7 @@ export default function Header({
                       <Link
                         href="/profile"
                         role="menuitem"
-                        className="block px-3 py-2 text-sm hover:bg-[var(--background)]/50"
+                        className="block px-3 py-2 text-sm transition-colors hover:bg-[var(--accent)] hover:text-white"
                         onClick={() => setMenuOpen(false)}
                       >
                         Profile
@@ -147,7 +164,7 @@ export default function Header({
                       <Link
                         href="/settings"
                         role="menuitem"
-                        className="block px-3 py-2 text-sm hover:bg-[var(--background)]/50"
+                        className="block px-3 py-2 text-sm transition-colors hover:bg-[var(--accent)] hover:text-white"
                         onClick={() => setMenuOpen(false)}
                       >
                         Settings
@@ -155,7 +172,7 @@ export default function Header({
                       <button
                         role="menuitem"
                         onClick={handleSignOut}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--background)]/50"
+                        className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--accent)] hover:text-white"
                       >
                         Sign out
                       </button>
@@ -165,7 +182,7 @@ export default function Header({
                       <Link
                         href="/signin"
                         role="menuitem"
-                        className="block px-3 py-2 text-sm hover:bg-[var(--background)]/50"
+                        className="block px-3 py-2 text-sm transition-colors hover:bg-[var(--accent)] hover:text-white"
                         onClick={() => setMenuOpen(false)}
                       >
                         Sign in
@@ -173,7 +190,7 @@ export default function Header({
                       <Link
                         href="/signin?mode=signup"
                         role="menuitem"
-                        className="block px-3 py-2 text-sm hover:bg-[var(--background)]/50"
+                        className="block px-3 py-2 text-sm transition-colors hover:bg-[var(--accent)] hover:text-white"
                         onClick={() => setMenuOpen(false)}
                       >
                         Create account
