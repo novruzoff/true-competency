@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
-/* Fonts are already applied in layout via next/font (Inter/Manrope) */
-
-/* -----------------------------
-   CSS Variables (Light default)
-------------------------------*/
+/* ---------------------------------------------------
+   Global design tokens — Light is the default theme
+---------------------------------------------------- */
 :root {
   --background: #ffffff;
   --foreground: #0a0a0a;
+  --surface: #ffffff;
+  --field: #ffffff;
+  --muted: #6b7280;
+
   --accent: #5170ff;
   --border: #e5e7eb;
   --ok: #34d399; /* success green */
@@ -15,39 +17,26 @@
   --warn: #facc15; /* warning yellow (for intermediate) */
 }
 
-/* Add to globals.css (after your existing :root) */
-:root {
-  --surface: #ffffff; /* cards/sheets in light */
-  --field: #ffffff; /* inputs in light */
-  --muted: #6b7280;
-}
-
-/* -----------------------------
-   Dark theme (via .dark class)
-------------------------------*/
+/* ---------------------------------------------------
+   Dark theme overrides (enabled when <html class="dark">)
+---------------------------------------------------- */
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
-  --border: #1f232a;
   --surface: #0f1116; /* card bg in dark */
   --field: #141820; /* input bg in dark */
   --muted: #9aa0a6;
-}
 
-/* -----------------------------
-   Dark theme variables (sync)
-------------------------------*/
-:root.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
   --accent: #5170ff;
   --border: #1f232a;
-  --ok: #34d399; /* success green */
-  --err: #fb7185; /* error red */
+  --ok: #34d399;
+  --err: #fb7185;
   --warn: #eab308; /* slightly deeper yellow for dark mode */
 }
 
-/* Bridge vars into Tailwind inline theme tokens */
+/* ---------------------------------------------------
+   Bridge variables into Tailwind color tokens
+---------------------------------------------------- */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -58,7 +47,9 @@
   --color-warn: var(--warn);
 }
 
-/* Base */
+/* ---------------------------------------------------
+   Base element styles
+---------------------------------------------------- */
 html,
 body {
   min-height: 100%;
@@ -75,30 +66,36 @@ body {
     border-color 0.2s ease;
 }
 
-/* Utilities */
+/* ---------------------------------------------------
+   Utility helpers
+---------------------------------------------------- */
 .border-default {
   border: 1px solid var(--border);
 }
+
 .text-accent {
   color: var(--accent);
 }
+
 .bg-accent {
   background-color: var(--accent);
 }
+
 .bg-ok {
   background-color: var(--ok);
 }
+
 .bg-err {
   background-color: var(--err);
 }
 
-/* Button helper to guarantee white label on primary */
+/* Guarantee white label on accent buttons */
 .btn-primary,
 .btn-primary * {
   color: #fff !important;
 }
 
-/* Card */
+/* Card surfaces */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -106,16 +103,18 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 6px rgba(0, 0, 0, 0.04);
 }
 
-/* Optional: focus ring consistent with accent */
+/* Consistent accent focus ring */
 :focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent);
   border-radius: 8px;
 }
 
-/* ----- Fancy but token-respecting helpers ----- */
+/* ---------------------------------------------------
+   Decorative helpers
+---------------------------------------------------- */
 
-/* Subtle animated SVG grid that respects border token */
+/* SVG dot grid */
 .bg-grid {
   background-image: radial-gradient(
     circle at 1px 1px,
@@ -125,7 +124,7 @@ body {
   background-size: 22px 22px;
 }
 
-/* Super-light film grain for depth */
+/* Light film grain for depth */
 .bg-noise {
   background-image: url("data:image/svg+xml;utf8,\
   <svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'>\
@@ -138,12 +137,12 @@ body {
   background-size: 240px 240px;
 }
 
-/* Accent glow line used under focused fields */
+/* Accent glow line for focus/inputs */
 .glow-accent {
   background: color-mix(in oklab, var(--accent) 65%, transparent);
 }
 
-/* Soft animated accent shine on buttons */
+/* Soft animated accent shine */
 .shine {
   background: linear-gradient(
     to bottom,
@@ -165,7 +164,7 @@ body {
   }
 }
 
-/* Floating animations for blobs (kept very subtle) */
+/* Floating animation for blobs */
 @keyframes floatSlow {
   0% {
     transform: translateY(0) translateX(0);
@@ -195,7 +194,7 @@ body {
   animation: floatSlower 16s ease-in-out infinite;
 }
 
-/* Accent underline for hero headline (kept) */
+/* Accent underline for section titles */
 .accent-underline {
   height: 3px;
   width: 86px;
@@ -204,7 +203,7 @@ body {
   box-shadow: 0 0 24px color-mix(in oklab, var(--accent) 35%, transparent);
 }
 
-/* Beams (kept from earlier) */
+/* Gradient “beam” overlays */
 .beams::before,
 .beams::after {
   content: "";
@@ -250,7 +249,7 @@ body {
   }
 }
 
-/* Glowing logo helpers */
+/* Logo halo + rotating beam glow */
 .logo-halo {
   background: radial-gradient(
       60% 80% at 50% 30%,
@@ -289,6 +288,7 @@ body {
   }
 }
 
+/* Subtle accent pulse */
 @keyframes pulseGlow {
   0%,
   100% {

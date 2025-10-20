@@ -88,8 +88,8 @@ export default function Header({
           <Image
             src="/TC_Logo.png"
             alt="True Competency"
-            width={32}
-            height={32}
+            width={48}
+            height={48}
             className="object-contain drop-shadow-[0_8px_24px_color-mix(in_oklab,var(--accent)_35%,transparent)]"
             priority
           />
