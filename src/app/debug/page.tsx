@@ -1,32 +1,33 @@
 // src/app/debug/page.tsx
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import DebugClient from "./DebugClient";
 
-export const dynamic = "force-dynamic"; // ensure fresh auth on each request
+export const dynamic = "force-dynamic"; // always read fresh cookies/session
 
 export default async function DebugPage() {
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
+  // ✅ Server-side Supabase bound to request cookies
+  const supabase = await getSupabaseServer();
+
+  // Auth gate
+  const { data: userRes, error: userErr } = await supabase.auth.getUser();
+  const user = userRes?.user;
   if (userErr || !user) {
-    redirect("/signin?redirect=/debug");
+    // Preserve desired destination after sign-in
+    redirect(`/signin?redirect=${encodeURIComponent("/debug")}`);
   }
 
-  // Check admin membership
+  // Admin gate (via RLS-safe lookup)
   const { data: adminRow, error: adminErr } = await supabase
     .from("app_admins")
     .select("user_id")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  // If the policy blocks or row doesn't exist -> treat as non-admin
   if (adminErr || !adminRow) {
     redirect("/"); // or redirect("/403") if you have a 403 page
   }
 
-  // Authorized: render the client UI
+  // Authorized
   return <DebugClient />;
 }
