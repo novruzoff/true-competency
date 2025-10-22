@@ -349,10 +349,12 @@ export default function SignInPage() {
   }
 
   // handle country change from CountrySelect
-  function onCountryChange(opt: any) {
+  function onCountryChange(opt: unknown) {
     // expecting { value: 'US', label: '🇺🇸 United States' } or similar
-    const code = typeof opt === "string" ? opt : opt?.value ?? "";
-    const name = typeof opt === "string" ? opt : opt?.label ?? "";
+    const code =
+      typeof opt === "string" ? opt : (opt as { value?: string }).value ?? "";
+    const name =
+      typeof opt === "string" ? opt : (opt as { label?: string }).label ?? "";
     setCountryCode(code);
     setCountryName(name);
   }
