@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { ensureProfile } from "@/lib/ensureProfile";
+import CountrySelect from "@/components/CountrySelect"; // expects { value?: string; onChange: ({value,label})=>void }
 
 type Role = "trainee" | "instructor" | "committee";
 
@@ -24,8 +25,9 @@ function RoleChip({
       type="button"
       onClick={onClick}
       className={[
-        "px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+        "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
         "backdrop-blur-sm",
+        "hover:scale-[1.05] active:scale-[0.98]",
         active
           ? "bg-[var(--accent)] text-white border-transparent shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_20%,transparent)]"
           : "bg-[color:var(--surface)]/70 text-[var(--foreground)]/85 border-[var(--border)] hover:bg-[var(--surface)]",
@@ -56,7 +58,7 @@ function Field({
   return (
     <div className="group">
       <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
-        {label}
+        {label} {required ? <span className="text-red-500">*</span> : null}
       </label>
       <div
         className={[
@@ -130,13 +132,13 @@ function PasswordField({
           type="button"
           aria-label={show ? "Hide password" : "Show password"}
           onClick={() => setShow((s) => !s)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]/80 hover:bg-[var(--field)]"
+          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]/80 hover:bg-[var(--field)] transition-transform hover:scale-[1.08] active:scale-[0.98]"
         >
           {show ? (
             // Eye-off
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
-                d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 001.42-.38M9.88 5.08A10.94 10.94 0 0112 5c5 0 9.27 3.11 11 7- .41.94-1 1.8-1.7 2.57M6.53 6.53C4.2 7.86 2.54 9.74 1 12c.64 1.17 1.5 2.24 2.53 3.17A11.22 11.22 0 0012 19c1.3 0 2.55-.2 3.72-.58"
+                d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 001.42-.38M9.88 5.08A10.94 10.94 0 0112 5c5 0 9.27 3.11 11 7-.41.94-1 1.8-1.7 2.57M6.53 6.53C4.2 7.86 2.54 9.74 1 12c.64 1.17 1.5 2.24 2.53 3.17A11.22 11.22 0 0012 19c1.3 0 2.55-.2 3.72-.58"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
@@ -174,15 +176,15 @@ const ROLE_INFO: Record<Role, { title: string; points: string[] }> = {
   trainee: {
     title: "Trainee — Build your competency portfolio",
     points: [
-      "Track progress across assigned competencies",
+      "Track progress across enrolled competencies",
       "Answer case-based questions with instant feedback",
       "Build a performance record for instructors & committee",
     ],
   },
   instructor: {
-    title: "Instructor — Assess and coach trainees",
+    title: "Instructor — Coach and review trainees",
     points: [
-      "Assign competencies and monitor progress",
+      "Monitor trainee progress in real time",
       "Review answers and provide targeted feedback",
       "Approve completed competencies",
     ],
@@ -218,6 +220,14 @@ export default function SignInPage() {
   const [lastName, setLastName] = useState("");
   const [confirm, setConfirm] = useState("");
 
+  // Country (required)
+  const [countryCode, setCountryCode] = useState<string>("");
+  const [countryName, setCountryName] = useState<string>("");
+
+  // Optional org
+  const [university, setUniversity] = useState("");
+  const [hospital, setHospital] = useState("");
+
   // Shared
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -232,6 +242,7 @@ export default function SignInPage() {
     if (mode === "signup") {
       if (!firstName.trim() || !lastName.trim())
         return "Please enter your first and last name.";
+      if (!countryCode) return "Please select your country.";
       if (password.length < 8) return "Password must be at least 8 characters.";
       if (password !== confirm) return "Passwords do not match.";
     }
@@ -270,23 +281,33 @@ export default function SignInPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
+        const meta = {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          role,
+          country_code: countryCode,
+          country_name: countryName,
+          university: role === "trainee" ? university.trim() || null : null,
+          hospital: role === "instructor" ? hospital.trim() || null : null,
+        };
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: {
-              first_name: firstName.trim(),
-              last_name: lastName.trim(),
-              role,
-            },
+            data: meta,
           },
         });
         if (error) throw error;
 
         if (data.user) {
+          // Ensure row in profiles
           await ensureProfile(supabase);
+
           const fullName =
             `${firstName.trim()} ${lastName.trim()}`.trim() || null;
+
+          // Persist all fields to profiles
           const { error: updErr } = await supabase
             .from("profiles")
             .update({
@@ -294,6 +315,10 @@ export default function SignInPage() {
               first_name: firstName.trim() || null,
               last_name: lastName.trim() || null,
               full_name: fullName,
+              country_code: countryCode,
+              country_name: countryName,
+              university: role === "trainee" ? university.trim() || null : null,
+              hospital: role === "instructor" ? hospital.trim() || null : null,
             })
             .eq("id", data.user.id);
           if (updErr) throw updErr;
@@ -321,6 +346,15 @@ export default function SignInPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // handle country change from CountrySelect
+  function onCountryChange(opt: any) {
+    // expecting { value: 'US', label: '🇺🇸 United States' } or similar
+    const code = typeof opt === "string" ? opt : opt?.value ?? "";
+    const name = typeof opt === "string" ? opt : opt?.label ?? "";
+    setCountryCode(code);
+    setCountryName(name);
   }
 
   return (
@@ -413,9 +447,11 @@ export default function SignInPage() {
             {/* mode switch */}
             <div className="mb-4 flex items-center justify-center gap-2">
               <button
+                type="button"
                 onClick={() => setMode("signin")}
                 className={[
-                  "px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                  "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                  "hover:scale-[1.05] active:scale-[0.98]",
                   mode === "signin"
                     ? "bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
                     : "bg-transparent text-[var(--muted)] border-[var(--border)]/50 hover:text-[var(--foreground)]",
@@ -424,9 +460,11 @@ export default function SignInPage() {
                 Sign in
               </button>
               <button
+                type="button"
                 onClick={() => setMode("signup")}
                 className={[
-                  "px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                  "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                  "hover:scale-[1.05] active:scale-[0.98]",
                   mode === "signup"
                     ? "bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
                     : "bg-transparent text-[var(--muted)] border-[var(--border)]/50 hover:text-[var(--foreground)]",
@@ -461,24 +499,68 @@ export default function SignInPage() {
             {/* form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === "signup" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Field
-                    label="First name"
-                    type="text"
-                    value={firstName}
-                    onChange={setFirstName}
-                    placeholder="Jane"
-                    autoComplete="given-name"
-                  />
-                  <Field
-                    label="Last name"
-                    type="text"
-                    value={lastName}
-                    onChange={setLastName}
-                    placeholder="Doe"
-                    autoComplete="family-name"
-                  />
-                </div>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Field
+                      label="First name"
+                      type="text"
+                      value={firstName}
+                      onChange={setFirstName}
+                      placeholder="Jane"
+                      autoComplete="given-name"
+                    />
+                    <Field
+                      label="Last name"
+                      type="text"
+                      value={lastName}
+                      onChange={setLastName}
+                      placeholder="Doe"
+                      autoComplete="family-name"
+                    />
+                  </div>
+
+                  {/* Country (required) */}
+                  <div className="group">
+                    <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+                      Country <span className="text-red-500">*</span>
+                    </label>
+                    <div className="border-[var(--border)] bg-[var(--field)] p-1.5">
+                      <CountrySelect
+                        value={countryCode}
+                        onChange={onCountryChange}
+                      />
+                    </div>
+                    {!countryCode && msg && (
+                      <div className="mt-1 text-xs text-red-500">
+                        {/* gently show only if there is a general form error */}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Role-specific optional org */}
+                  {role === "trainee" && (
+                    <Field
+                      label="University (optional)"
+                      type="text"
+                      value={university}
+                      onChange={setUniversity}
+                      placeholder="e.g., McGill University"
+                      autoComplete="organization"
+                      required={false}
+                    />
+                  )}
+                  {role === "instructor" && (
+                    <Field
+                      label="Hospital (optional)"
+                      type="text"
+                      value={hospital}
+                      onChange={setHospital}
+                      placeholder="e.g., Montreal General Hospital"
+                      autoComplete="organization"
+                      required={false}
+                    />
+                  )}
+                </>
               )}
 
               {/* Email (full width) */}
@@ -519,9 +601,9 @@ export default function SignInPage() {
                 disabled={loading}
                 className={[
                   "relative mt-2 w-full rounded-xl py-3 font-semibold btn-primary",
-                  "bg-[var(--accent)] disabled:opacity-60",
+                  "bg-[var(--accent)] disabled:opacity-60 text-white",
                   "shadow-[0_10px_24px_color-mix(in_oklab,var(--accent)_26%,transparent)]",
-                  "hover:scale-[1.01] active:scale-[0.99] transition-transform",
+                  "transition-transform hover:scale-[1.02] active:scale-[0.99]",
                 ].join(" ")}
               >
                 <span className="relative z-[1]">
@@ -553,8 +635,9 @@ export default function SignInPage() {
                 <>
                   Don&apos;t have an account?{" "}
                   <button
+                    type="button"
                     onClick={() => setMode("signup")}
-                    className="font-medium underline underline-offset-2 text-[var(--accent)]"
+                    className="font-medium underline underline-offset-2 text-[var(--accent)] transition-transform hover:scale-[1.03]"
                   >
                     Create account
                   </button>
@@ -563,8 +646,9 @@ export default function SignInPage() {
                 <>
                   Already have an account?{" "}
                   <button
+                    type="button"
                     onClick={() => setMode("signin")}
-                    className="font-medium underline underline-offset-2 text-[var(--accent)]"
+                    className="font-medium underline underline-offset-2 text-[var(--accent)] transition-transform hover:scale-[1.03]"
                   >
                     Sign in here
                   </button>
