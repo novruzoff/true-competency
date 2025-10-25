@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { ensureProfile } from "@/lib/ensureProfile";
-import CountrySelect from "@/components/CountrySelect"; // expects { value?: string; onChange: ({value,label})=>void }
+import CountrySelect from "@/components/CountrySelect"; // value: string | null; onChange: (code: string) => void
 
 type Role = "trainee" | "instructor" | "committee";
 
@@ -27,7 +27,7 @@ function RoleChip({
       className={[
         "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
         "backdrop-blur-sm",
-        "hover:scale-[1.05] active:scale-[0.98]",
+        "hover:scale-[1.08] active:scale-[0.98]",
         active
           ? "bg-[var(--accent)] text-white border-transparent shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_20%,transparent)]"
           : "bg-[color:var(--surface)]/70 text-[var(--foreground)]/85 border-[var(--border)] hover:bg-[var(--surface)]",
@@ -86,7 +86,6 @@ function Field({
   );
 }
 
-/** Password field with show/hide toggle (full width) */
 function PasswordField({
   label,
   value,
@@ -135,7 +134,6 @@ function PasswordField({
           className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]/80 hover:bg-[var(--field)] transition-transform hover:scale-[1.08] active:scale-[0.98]"
         >
           {show ? (
-            // Eye-off
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
                 d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 001.42-.38M9.88 5.08A10.94 10.94 0 0112 5c5 0 9.27 3.11 11 7-.41.94-1 1.8-1.7 2.57M6.53 6.53C4.2 7.86 2.54 9.74 1 12c.64 1.17 1.5 2.24 2.53 3.17A11.22 11.22 0 0012 19c1.3 0 2.55-.2 3.72-.58"
@@ -146,7 +144,6 @@ function PasswordField({
               />
             </svg>
           ) : (
-            // Eye
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
                 d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
@@ -209,24 +206,21 @@ export default function SignInPage() {
       const sp = new URLSearchParams(window.location.search);
       const r = sp.get("redirect");
       if (r && typeof r === "string") setRedirect(r);
-    } catch {}
+    } catch {
+      /* no-op */
+    }
   }, []);
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [role, setRole] = useState<Role>("trainee");
 
-  // Signup extras
+  // Signup fields
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [confirm, setConfirm] = useState("");
-
-  // Country (required)
-  const [countryCode, setCountryCode] = useState<string>("");
-  const [countryName, setCountryName] = useState<string>("");
-
-  // Optional org
-  const [university, setUniversity] = useState("");
-  const [hospital, setHospital] = useState("");
+  const [countryCode, setCountryCode] = useState<string>(""); // ISO-2, required
+  const [university, setUniversity] = useState(""); // optional (trainee)
+  const [hospital, setHospital] = useState(""); // optional (instructor)
 
   // Shared
   const [email, setEmail] = useState("");
@@ -234,6 +228,10 @@ export default function SignInPage() {
 
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ open: boolean; text: string }>({
+    open: false,
+    text: "",
+  });
 
   const roleInfo = useMemo(() => ROLE_INFO[role], [role]);
 
@@ -250,22 +248,20 @@ export default function SignInPage() {
   }
 
   function showError(e: unknown) {
-    if (typeof e === "object" && e && "message" in e) {
-      const err = e as {
+    if (typeof e === "object" && e !== null) {
+      const maybe = e as {
         message?: string;
         error_description?: string;
         details?: string;
       };
       const text =
-        [err.message, err.error_description, err.details]
-          .filter(Boolean)
+        [maybe.message, maybe.error_description, maybe.details]
+          .filter((t): t is string => !!t)
           .join(" — ") || "Something went wrong";
-      console.error("Auth error:", e);
       setMsg(text);
-    } else {
-      console.error("Auth error (unknown):", e);
-      setMsg("Something went wrong");
+      return;
     }
+    setMsg("Something went wrong");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -281,51 +277,85 @@ export default function SignInPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const meta = {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          role,
-          country_code: countryCode,
-          country_name: countryName,
-          university: role === "trainee" ? university.trim() || null : null,
-          hospital: role === "instructor" ? hospital.trim() || null : null,
-        };
-
+        // Send minimal metadata; role will be set in profiles (source of truth)
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: meta,
+            data: {
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              country_code: countryCode.toUpperCase(),
+            },
           },
         });
         if (error) throw error;
 
         if (data.user) {
-          // Ensure row in profiles
-          await ensureProfile(supabase);
+          const id = data.user.id;
 
+          // Build the desired profile row for first insert
           const fullName =
             `${firstName.trim()} ${lastName.trim()}`.trim() || null;
+          const insertPayload = {
+            id,
+            email,
+            role, // set on initial insert to avoid later role-change restrictions
+            first_name: firstName.trim() || null,
+            last_name: lastName.trim() || null,
+            full_name: fullName,
+            country_code: countryCode.toUpperCase(),
+            university: role === "trainee" ? university.trim() || null : null,
+            hospital: role === "instructor" ? hospital.trim() || null : null,
+          };
 
-          // Persist all fields to profiles
-          const { error: updErr } = await supabase
+          // Try to INSERT the profile row immediately
+          const { error: insertErr } = await supabase
             .from("profiles")
-            .update({
-              role,
+            .insert(insertPayload);
+
+          if (insertErr) {
+            // If a row already exists (e.g., a trigger or a parallel process inserted it),
+            // update non-role fields; set role only if it's currently NULL.
+            const { data: profRow, error: selErr } = await supabase
+              .from("profiles")
+              .select("role")
+              .eq("id", id)
+              .single();
+            if (selErr) throw selErr;
+
+            const updatePayload: Record<string, string | null | Role> = {
+              email,
               first_name: firstName.trim() || null,
               last_name: lastName.trim() || null,
               full_name: fullName,
-              country_code: countryCode,
-              country_name: countryName,
+              country_code: countryCode.toUpperCase(),
               university: role === "trainee" ? university.trim() || null : null,
               hospital: role === "instructor" ? hospital.trim() || null : null,
-            })
-            .eq("id", data.user.id);
-          if (updErr) throw updErr;
-        }
+            };
+            // Only include role if it's currently null/empty to satisfy policies like
+            // "Only admins can change role".
+            if (!profRow || !profRow.role) {
+              (updatePayload as Record<string, unknown>).role = role;
+            }
 
-        setMsg("Account created. You can now sign in.");
-        setMode("signin");
+            const { error: updErr } = await supabase
+              .from("profiles")
+              .update(updatePayload)
+              .eq("id", id);
+
+            if (updErr) throw updErr;
+          }
+
+          // Success toast (non-error look)
+          setToast({
+            open: true,
+            text: "Account created. You can now sign in.",
+          });
+          // Auto-hide toast after 4s
+          setTimeout(() => setToast({ open: false, text: "" }), 4000);
+          setMode("signin");
+        }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -334,6 +364,8 @@ export default function SignInPage() {
         if (error) throw error;
 
         if (data.user) {
+          setToast({ open: true, text: "Signed in successfully" });
+          setTimeout(() => setToast({ open: false, text: "" }), 2500);
           await ensureProfile(supabase);
           await supabase.auth.getSession();
           await new Promise((r) => setTimeout(r, 0));
@@ -341,22 +373,16 @@ export default function SignInPage() {
           return;
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
       showError(err);
     } finally {
       setLoading(false);
     }
   }
 
-  // handle country change from CountrySelect
-  function onCountryChange(opt: unknown) {
-    // expecting { value: 'US', label: '🇺🇸 United States' } or similar
-    const code =
-      typeof opt === "string" ? opt : (opt as { value?: string }).value ?? "";
-    const name =
-      typeof opt === "string" ? opt : (opt as { label?: string }).label ?? "";
-    setCountryCode(code);
-    setCountryName(name);
+  // CountrySelect returns alpha-2 string
+  function onCountryChange(code: string) {
+    setCountryCode((code || "").toUpperCase());
   }
 
   return (
@@ -406,7 +432,7 @@ export default function SignInPage() {
           </span>
         </div>
 
-        {/* Main shell */}
+        {/* Shell */}
         <div
           className={[
             "relative mx-auto grid max-w-4xl gap-6 rounded-3xl p-6 md:grid-cols-2 md:p-8",
@@ -414,7 +440,7 @@ export default function SignInPage() {
             "shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_40px_color-mix(in_oklab,var(--accent)_18%,transparent)]",
           ].join(" ")}
         >
-          {/* LEFT: dynamic panel */}
+          {/* LEFT: copy */}
           <div className="relative">
             <div className="sticky top-8 space-y-5">
               {mode === "signup" ? (
@@ -444,7 +470,7 @@ export default function SignInPage() {
             </div>
           </div>
 
-          {/* RIGHT: auth form */}
+          {/* RIGHT: form */}
           <div className="relative">
             {/* mode switch */}
             <div className="mb-4 flex items-center justify-center gap-2">
@@ -453,7 +479,7 @@ export default function SignInPage() {
                 onClick={() => setMode("signin")}
                 className={[
                   "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                  "hover:scale-[1.05] active:scale-[0.98]",
+                  "hover:scale-[1.08] active:scale-[0.98]",
                   mode === "signin"
                     ? "bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
                     : "bg-transparent text-[var(--muted)] border-[var(--border)]/50 hover:text-[var(--foreground)]",
@@ -466,7 +492,7 @@ export default function SignInPage() {
                 onClick={() => setMode("signup")}
                 className={[
                   "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                  "hover:scale-[1.05] active:scale-[0.98]",
+                  "hover:scale-[1.08] active:scale-[0.98]",
                   mode === "signup"
                     ? "bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
                     : "bg-transparent text-[var(--muted)] border-[var(--border)]/50 hover:text-[var(--foreground)]",
@@ -521,25 +547,21 @@ export default function SignInPage() {
                     />
                   </div>
 
-                  {/* Country (required) */}
+                  {/* Country */}
                   <div className="group">
                     <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
                       Country <span className="text-red-500">*</span>
                     </label>
-                    <div className="border-[var(--border)] bg-[var(--field)] p-1.5">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--field)] p-1.5">
                       <CountrySelect
-                        value={countryCode}
+                        value={countryCode || null}
                         onChange={onCountryChange}
+                        placeholder="Select your country…"
                       />
                     </div>
-                    {!countryCode && msg && (
-                      <div className="mt-1 text-xs text-red-500">
-                        {/* gently show only if there is a general form error */}
-                      </div>
-                    )}
                   </div>
 
-                  {/* Role-specific optional org */}
+                  {/* Optional org by role */}
                   {role === "trainee" && (
                     <Field
                       label="University (optional)"
@@ -565,7 +587,7 @@ export default function SignInPage() {
                 </>
               )}
 
-              {/* Email (full width) */}
+              {/* Email */}
               <Field
                 label="Email Address"
                 type="email"
@@ -575,7 +597,7 @@ export default function SignInPage() {
                 autoComplete="email"
               />
 
-              {/* Password (full width) */}
+              {/* Passwords */}
               <PasswordField
                 label="Password"
                 value={password}
@@ -587,8 +609,6 @@ export default function SignInPage() {
                   mode === "signup" ? "new-password" : "current-password"
                 }
               />
-
-              {/* Confirm (signup only, full width) */}
               {mode === "signup" && (
                 <PasswordField
                   label="Confirm password"
@@ -600,10 +620,11 @@ export default function SignInPage() {
               )}
 
               <button
+                type="submit"
                 disabled={loading}
                 className={[
-                  "relative mt-2 w-full rounded-xl py-3 font-semibold btn-primary",
-                  "bg-[var(--accent)] disabled:opacity-60 text-white",
+                  "relative mt-2 w-full rounded-xl py-3 font-semibold",
+                  "bg-[var(--accent)] text-white disabled:opacity-60",
                   "shadow-[0_10px_24px_color-mix(in_oklab,var(--accent)_26%,transparent)]",
                   "transition-transform hover:scale-[1.02] active:scale-[0.99]",
                 ].join(" ")}
@@ -631,7 +652,7 @@ export default function SignInPage() {
               <div className="h-px flex-1 bg-[var(--border)]" />
             </div>
 
-            {/* mode toggler text */}
+            {/* toggle */}
             <p className="text-center text-sm text-[var(--foreground)]">
               {mode === "signin" ? (
                 <>
@@ -639,7 +660,7 @@ export default function SignInPage() {
                   <button
                     type="button"
                     onClick={() => setMode("signup")}
-                    className="font-medium underline underline-offset-2 text-[var(--accent)] transition-transform hover:scale-[1.03]"
+                    className="font-medium underline underline-offset-2 text-[var(--accent)] transition-transform hover:scale-[1.06]"
                   >
                     Create account
                   </button>
@@ -650,7 +671,7 @@ export default function SignInPage() {
                   <button
                     type="button"
                     onClick={() => setMode("signin")}
-                    className="font-medium underline underline-offset-2 text-[var(--accent)] transition-transform hover:scale-[1.03]"
+                    className="font-medium underline underline-offset-2 text-[var(--accent)] transition-transform hover:scale-[1.06]"
                   >
                     Sign in here
                   </button>
@@ -664,6 +685,21 @@ export default function SignInPage() {
           </div>
         </div>
       </div>
+      {/* success toast */}
+      {toast.open && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+          <div
+            className="rounded-lg border px-4 py-2 text-sm shadow-lg"
+            style={{
+              background: "var(--ok)",
+              color: "#0b2d17",
+              borderColor: "#1c6b3d",
+            }}
+          >
+            {toast.text}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
