@@ -477,7 +477,7 @@ export default function InstructorClient() {
             filteredStudents.map((s) => (
               <button
                 key={s.id}
-                onClick={() => router.push(`/instructor/student/${s.id}`)}
+                onClick={() => router.push(`/instructor/trainee/${s.id}`)}
                 className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:shadow-md transition"
               >
                 <div className="flex items-center justify-between gap-4">
