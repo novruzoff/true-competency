@@ -207,18 +207,16 @@ export default function TraineeDashboard() {
       // optimistic
       setAssignments((prev) => new Set(prev).add(competencyId));
 
-      const { error } = await supabase
-        .from("competency_assignments")
-        .upsert(
-          [
-            {
-              student_id: me.id,
-              competency_id: competencyId,
-              assigned_at: now,
-            },
-          ],
-          { onConflict: "student_id,competency_id" }
-        );
+      const { error } = await supabase.from("competency_assignments").upsert(
+        [
+          {
+            student_id: me.id,
+            competency_id: competencyId,
+            assigned_at: now,
+          },
+        ],
+        { onConflict: "student_id,competency_id" }
+      );
       if (error) {
         // rollback
         setAssignments((prev) => {
@@ -359,6 +357,12 @@ export default function TraineeDashboard() {
       else next.add(t);
       return next;
     });
+
+  const clearFilters = () => {
+    setDiffFilter("all");
+    setSelectedTags(new Set());
+    setSearchQ("");
+  };
 
   /* ---------- render ---------- */
   return (
@@ -508,13 +512,23 @@ export default function TraineeDashboard() {
               />
             </div>
 
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--field)] w-full lg:w-80">
-              <input
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                placeholder="Search by name or tag…"
-                className="w-full bg-transparent px-3 py-2 text-sm outline-none placeholder:[color:var(--muted)]"
-              />
+            <div className="flex items-center gap-2 w-full lg:w-auto">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--field)] w-full lg:w-80">
+                <input
+                  value={searchQ}
+                  onChange={(e) => setSearchQ(e.target.value)}
+                  placeholder="Search by name or tag…"
+                  className="w-full bg-transparent px-3 py-2 text-sm outline-none placeholder:[color:var(--muted)]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 text-sm hover:bg-[var(--surface)] transition hover:scale-[1.02] active:scale-[0.99]"
+                title="Clear all filters"
+              >
+                Clear all
+              </button>
             </div>
           </div>
 
@@ -573,25 +587,32 @@ export default function TraineeDashboard() {
             return (
               <article
                 key={`enr_${c.id}`}
-                className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
+                className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm min-h-[160px]"
               >
                 <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1 pe-12 md:pe-14">
+                  <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+                    {diffRaw && (
+                      <span
+                        className="text-[10px] font-semibold rounded-full px-2 py-0.5"
+                        style={{
+                          background: badgeBg(diffRaw),
+                          color: "#000",
+                        }}
+                      >
+                        {diffRaw}
+                      </span>
+                    )}
+                    <ChevronAction
+                      href={`/trainee/competency/${c.id}`}
+                      variant="accent"
+                      title="Open"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 pe-28 md:pe-32">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold leading-tight truncate">
+                      <h3 className="font-semibold leading-snug break-words">
                         {title}
                       </h3>
-                      {diffRaw && (
-                        <span
-                          className="text-[10px] font-semibold rounded-full px-2 py-0.5"
-                          style={{
-                            background: badgeBg(diffRaw),
-                            color: "#000",
-                          }}
-                        >
-                          {diffRaw}
-                        </span>
-                      )}
                     </div>
 
                     {!!c.tags?.length && (
@@ -621,13 +642,6 @@ export default function TraineeDashboard() {
                       />
                     </div>
                   </div>
-
-                  <ChevronAction
-                    href={`/trainee/competency/${c.id}`}
-                    variant="accent"
-                    className="absolute top-3 right-3"
-                    title="Open"
-                  />
                 </div>
               </article>
             );
@@ -660,25 +674,47 @@ export default function TraineeDashboard() {
             return (
               <article
                 key={`avail_${c.id}`}
-                className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
+                className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm min-h-[160px]"
               >
                 <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1 pe-12 md:pe-14">
+                  <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+                    {diffRaw && (
+                      <span
+                        className="text-[10px] font-semibold rounded-full px-2 py-0.5"
+                        style={{
+                          background: badgeBg(diffRaw),
+                          color: "#000",
+                        }}
+                      >
+                        {diffRaw}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => enroll(c.id)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border-2 transition-colors"
+                      style={{
+                        background: "#fff",
+                        color: "var(--accent)",
+                        borderColor: "var(--accent)",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget.style.background = "var(--accent)"),
+                          (e.currentTarget.style.color = "#fff");
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget.style.background = "#fff"),
+                          (e.currentTarget.style.color = "var(--accent)");
+                      }}
+                      title="Enroll"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="min-w-0 flex-1 pe-28 md:pe-32">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold leading-tight truncate">
+                      <h3 className="font-semibold leading-snug break-words">
                         {title}
                       </h3>
-                      {diffRaw && (
-                        <span
-                          className="text-[10px] font-semibold rounded-full px-2 py-0.5"
-                          style={{
-                            background: badgeBg(diffRaw),
-                            color: "#000",
-                          }}
-                        >
-                          {diffRaw}
-                        </span>
-                      )}
                     </div>
 
                     {!!c.tags?.length && (
@@ -689,15 +725,6 @@ export default function TraineeDashboard() {
                       </div>
                     )}
                   </div>
-
-                  <button
-                    onClick={() => enroll(c.id)}
-                    className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-white"
-                    style={{ background: "var(--accent)" }}
-                    title="Enroll"
-                  >
-                    +
-                  </button>
                 </div>
               </article>
             );
