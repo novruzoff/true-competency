@@ -1,10 +1,11 @@
 // src/app/instructor/trainee/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+/* ---------------- Types ---------------- */
 type TraineeProfile = {
   id: string;
   email: string | null;
@@ -49,10 +50,21 @@ const DIFF_ORDER: Record<string, number> = {
   expert: 3,
 };
 
+function messageFrom(e: unknown, fallback = "Something went wrong."): string {
+  if (typeof e === "object" && e && "message" in e) {
+    const msg = (e as { message?: string }).message;
+    if (msg) return msg;
+  }
+  if (typeof e === "string") return e;
+  return fallback;
+}
+
+/* ---------------- Page ---------------- */
 export default function InstructorTraineeDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const traineeId = params?.id;
+  const traineeId = params?.id ?? "";
+  const isMounted = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -62,106 +74,106 @@ export default function InstructorTraineeDetailPage() {
   const [approving, setApproving] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  async function load() {
+    try {
+      setErr(null);
+      setLoading(true);
 
-    (async () => {
-      if (!traineeId) return;
-      try {
-        setErr(null);
-        setLoading(true);
-
-        // 1) Fetch trainee profile
-        const { data: t, error: tErr } = await supabase
-          .from("profiles")
-          .select("id,email,first_name,last_name,full_name,role")
-          .eq("id", traineeId)
-          .maybeSingle<TraineeProfile>();
-        if (tErr) throw tErr;
-        if (!t) throw new Error("Trainee not found.");
-        if (!cancelled) setTrainee(t);
-
-        // 2) Load the list of competencies the trainee is enrolled in.
-        //    We assume the self-enrollment also writes to competency_assignments.
-        const { data: assigns, error: aErr } = await supabase
-          .from("competency_assignments")
-          .select("student_id,competency_id")
-          .eq("student_id", traineeId)
-          .returns<AssignmentRow[]>();
-        if (aErr) throw aErr;
-
-        const compIds = Array.from(
-          new Set((assigns ?? []).map((a) => a.competency_id))
-        );
-        if (compIds.length === 0) {
-          if (!cancelled) setItems([]);
-          return;
+      if (!traineeId) {
+        if (isMounted.current) {
+          setTrainee(null);
+          setItems([]);
         }
-
-        // 3) Fetch competencies
-        const { data: comps, error: cErr } = await supabase
-          .from("competencies")
-          .select("id,name,difficulty,tags")
-          .in("id", compIds)
-          .returns<Competency[]>();
-        if (cErr) throw cErr;
-
-        // 4) Fetch progress for this trainee on these competencies
-        const { data: progress, error: pErr } = await supabase
-          .from("student_competency_progress")
-          .select("student_id,competency_id,pct")
-          .eq("student_id", traineeId)
-          .in("competency_id", compIds)
-          .returns<ProgressRow[]>();
-        if (pErr) throw pErr;
-
-        const pctByComp = new Map<string, number>();
-        (progress ?? []).forEach((r) => pctByComp.set(r.competency_id, r.pct));
-
-        // 5) Determine if competency has questions
-        const { data: qRows, error: qErr } = await supabase
-          .from("competency_questions")
-          .select("competency_id")
-          .in("competency_id", compIds)
-          .returns<QuestionRow[]>();
-        if (qErr) throw qErr;
-        const hasQ = new Set((qRows ?? []).map((q) => q.competency_id));
-
-        const list: Item[] =
-          (comps ?? []).map((c) => ({
-            competency: c,
-            pct: pctByComp.get(c.id) ?? 0,
-            hasQuestions: hasQ.has(c.id),
-          })) ?? [];
-
-        // sort: difficulty, name
-        list.sort((a, b) => {
-          const da =
-            DIFF_ORDER[(a.competency.difficulty ?? "").toLowerCase()] ?? 99;
-          const db =
-            DIFF_ORDER[(b.competency.difficulty ?? "").toLowerCase()] ?? 99;
-          if (da !== db) return da - db;
-          const an = (a.competency.name ?? "").toLowerCase();
-          const bn = (b.competency.name ?? "").toLowerCase();
-          return an.localeCompare(bn);
-        });
-
-        if (!cancelled) setItems(list);
-      } catch (e) {
-        const msg =
-          typeof e === "object" && e && "message" in e
-            ? (e as { message?: string }).message || "Something went wrong."
-            : typeof e === "string"
-            ? e
-            : "Something went wrong.";
-        setErr(msg);
-      } finally {
-        if (!cancelled) setLoading(false);
+        return;
       }
-    })();
 
+      // 1) Trainee profile
+      const { data: t, error: tErr } = await supabase
+        .from("profiles")
+        .select("id,email,first_name,last_name,full_name,role")
+        .eq("id", traineeId)
+        .maybeSingle<TraineeProfile>();
+      if (tErr) throw tErr;
+      if (!t) throw new Error("Trainee not found.");
+      if (isMounted.current) setTrainee(t);
+
+      // 2) Assignments
+      const { data: assigns, error: aErr } = await supabase
+        .from("competency_assignments")
+        .select("student_id,competency_id")
+        .eq("student_id", traineeId)
+        .returns<AssignmentRow[]>();
+      if (aErr) throw aErr;
+
+      const compIds = Array.from(
+        new Set((assigns ?? []).map((a) => a.competency_id))
+      );
+      if (compIds.length === 0) {
+        if (isMounted.current) setItems([]);
+        return;
+      }
+
+      // 3) Competencies
+      const { data: comps, error: cErr } = await supabase
+        .from("competencies")
+        .select("id,name,difficulty,tags")
+        .in("id", compIds)
+        .returns<Competency[]>();
+      if (cErr) throw cErr;
+
+      // 4) Progress
+      const { data: progress, error: pErr } = await supabase
+        .from("student_competency_progress")
+        .select("student_id,competency_id,pct")
+        .eq("student_id", traineeId)
+        .in("competency_id", compIds)
+        .returns<ProgressRow[]>();
+      if (pErr) throw pErr;
+
+      const pctByComp = new Map<string, number>();
+      (progress ?? []).forEach((r) => pctByComp.set(r.competency_id, r.pct));
+
+      // 5) Has questions?
+      const { data: qRows, error: qErr } = await supabase
+        .from("competency_questions")
+        .select("competency_id")
+        .in("competency_id", compIds)
+        .returns<QuestionRow[]>();
+      if (qErr) throw qErr;
+
+      const hasQ = new Set((qRows ?? []).map((q) => q.competency_id));
+
+      const list: Item[] = (comps ?? []).map((c) => ({
+        competency: c,
+        pct: pctByComp.get(c.id) ?? 0,
+        hasQuestions: hasQ.has(c.id),
+      }));
+
+      // sort: difficulty then name
+      list.sort((a, b) => {
+        const da =
+          DIFF_ORDER[(a.competency.difficulty ?? "").toLowerCase()] ?? 99;
+        const db =
+          DIFF_ORDER[(b.competency.difficulty ?? "").toLowerCase()] ?? 99;
+        if (da !== db) return da - db;
+        const an = (a.competency.name ?? "").toLowerCase();
+        const bn = (b.competency.name ?? "").toLowerCase();
+        return an.localeCompare(bn);
+      });
+
+      if (isMounted.current) setItems(list);
+    } catch (e) {
+      if (isMounted.current) setErr(messageFrom(e));
+    } finally {
+      if (isMounted.current) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    isMounted.current = true;
+    void load();
     return () => {
-      cancelled = true;
+      isMounted.current = false;
     };
   }, [traineeId]);
 
@@ -169,36 +181,36 @@ export default function InstructorTraineeDetailPage() {
     if (!traineeId) return;
     setApproving(compId);
     try {
-      // Call secure RPC that records completion in a writeable table (not the view)
-      const { error } = await supabase.rpc(
+      // 1) Call the secure RPC that writes to a base table (NOT the view)
+      const { error: rpcErr } = await supabase.rpc(
         "instructor_mark_competency_complete",
-        {
-          p_student_id: traineeId,
-          p_competency_id: compId,
-        }
+        { p_student_id: traineeId, p_competency_id: compId }
       );
-      if (error) {
-        throw new Error(error.message);
+      if (rpcErr) throw new Error(rpcErr.message);
+
+      // 2) Re-check via the progress view; if RLS blocks, we’ll see it here.
+      const { data: progCheck, error: progErr } = await supabase
+        .from("student_competency_progress")
+        .select("pct")
+        .eq("student_id", traineeId)
+        .eq("competency_id", compId)
+        .maybeSingle<{ pct: number }>();
+      if (progErr) throw progErr;
+
+      if (!progCheck || (progCheck.pct ?? 0) < 100) {
+        // This is the *same* message you saw; we keep it explicit to diagnose DB/RLS.
+        throw new Error(
+          "Approval recorded failed RLS or RPC had no effect (pct still < 100)."
+        );
       }
 
-      // reflect locally on success
-      setItems((prev) =>
-        prev.map((it) =>
-          it.competency.id === compId ? { ...it, pct: 100 } : it
-        )
-      );
+      // 3) Refresh list
+      await load();
 
       setToast("Competency approved.");
       setTimeout(() => setToast(null), 2000);
     } catch (e) {
-      // Provide a human-readable error string
-      let msg = "Failed to approve competency.";
-      if (typeof e === "object" && e && "message" in e) {
-        msg = (e as { message?: string }).message || msg;
-      } else if (typeof e === "string") {
-        msg = e;
-      }
-      setErr(msg);
+      setErr(`Could not approve competency. ${messageFrom(e, "")}`.trim());
     } finally {
       setApproving(null);
     }
@@ -271,12 +283,13 @@ export default function InstructorTraineeDetailPage() {
               const c = it.competency;
               const pct = it.pct ?? 0;
               const completed = pct >= 100;
+
               return (
                 <article
                   key={c.id}
                   className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
                 >
-                  {/* top-right actions */}
+                  {/* Top-right actions */}
                   <div className="absolute right-3 top-3 flex items-center gap-2">
                     {c.difficulty && (
                       <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[var(--field)] border border-[var(--border)] text-[var(--foreground)]/80">
