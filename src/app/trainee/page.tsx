@@ -468,7 +468,7 @@ export default function TraineeDashboard() {
                   }}
                   title="Enroll in a competency"
                 >
-                  + Enroll
+                  + Test
                 </button>
               </div>
             </div>
@@ -665,7 +665,7 @@ export default function TraineeDashboard() {
                           }}
                           title="Enroll"
                         >
-                          Enroll
+                          Test
                         </button>
                       </div>
                       <div className="min-w-0 pr-24 md:pr-28">
