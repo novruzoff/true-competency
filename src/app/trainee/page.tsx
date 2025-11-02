@@ -241,6 +241,63 @@ export default function TraineeDashboard() {
     [me]
   );
 
+  /** Bulk-enroll (a.k.a. "Bulk test") by difficulty */
+  const bulkEnroll = useCallback(
+    async (diff: "beginner" | "intermediate" | "expert" | "all") => {
+      if (!me) return;
+
+      // Compute target list from ALL competencies, excluding already enrolled
+      const pool =
+        diff === "all"
+          ? allComps
+          : allComps.filter(
+              (c) =>
+                (c.difficulty ?? "").toLowerCase() === diff &&
+                !assignments.has(c.id)
+            );
+
+      const targets = pool
+        .filter((c) => !assignments.has(c.id))
+        .map((c) => c.id);
+
+      if (targets.length === 0) {
+        setErr(
+          "No competencies available to bulk test for the selected difficulty."
+        );
+        return;
+      }
+
+      // Optimistic update
+      setAssignments((prev) => {
+        const next = new Set(prev);
+        targets.forEach((id) => next.add(id));
+        return next;
+      });
+
+      const now = new Date().toISOString();
+      const rows = targets.map((id) => ({
+        student_id: me.id,
+        competency_id: id,
+        assigned_at: now,
+      }));
+
+      const { error } = await supabase
+        .from("competency_assignments")
+        .upsert(rows, { onConflict: "student_id,competency_id" });
+
+      if (error) {
+        // rollback if insert failed
+        setAssignments((prev) => {
+          const next = new Set(prev);
+          targets.forEach((id) => next.delete(id));
+          return next;
+        });
+        setErr(error.message);
+      }
+    },
+    [me, allComps, assignments]
+  );
+
   /* ---------- derive filters & splits ---------- */
   const allTags = useMemo(() => {
     const bag = new Set<string>();
@@ -614,6 +671,70 @@ export default function TraineeDashboard() {
                 </div>
               </div>
 
+              {/* Bulk test actions */}
+              <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-sm font-medium">Bulk test</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bulkEnroll("beginner")}
+                      className="rounded-xl border px-3 py-2 text-xs font-medium transition hover:scale-[1.03]"
+                      style={{
+                        background: "var(--ok)",
+                        color: "#000",
+                        borderColor:
+                          "color-mix(in oklab, var(--ok) 35%, transparent)",
+                      }}
+                      title="Enroll in all Beginner competencies"
+                    >
+                      Test all Beginner
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bulkEnroll("intermediate")}
+                      className="rounded-xl border px-3 py-2 text-xs font-medium transition hover:scale-[1.03]"
+                      style={{
+                        background: "var(--warn)",
+                        color: "#000",
+                        borderColor:
+                          "color-mix(in oklab, var(--warn) 35%, transparent)",
+                      }}
+                      title="Enroll in all Intermediate competencies"
+                    >
+                      Test all Intermediate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bulkEnroll("expert")}
+                      className="rounded-xl border px-3 py-2 text-xs font-medium transition hover:scale-[1.03]"
+                      style={{
+                        background: "var(--err)",
+                        color: "#000",
+                        borderColor:
+                          "color-mix(in oklab, var(--err) 35%, transparent)",
+                      }}
+                      title="Enroll in all Expert competencies"
+                    >
+                      Test all Expert
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bulkEnroll("all")}
+                      className="rounded-xl border px-3 py-2 text-xs font-medium transition hover:scale-[1.03]"
+                      style={{
+                        background: "var(--field)",
+                        color: "var(--foreground)",
+                        borderColor: "var(--border)",
+                      }}
+                      title="Enroll in all available competencies"
+                    >
+                      Test all Available
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* List */}
               <div className="mt-4 max-h-[60vh] overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {availableForModal.map((c) => {
@@ -665,7 +786,7 @@ export default function TraineeDashboard() {
                           }}
                           title="Enroll"
                         >
-                          Test
+                          + Test
                         </button>
                       </div>
                       <div className="min-w-0 pr-24 md:pr-28">
@@ -1087,16 +1208,20 @@ function FilterChip({
   active: boolean;
   color?: string;
 }) {
+  // Use provided difficulty color for hover when available, else fall back to accent
+  const hoverBase = color ?? "var(--accent)";
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseEnter={(e) => {
         if (!active) {
-          (e.currentTarget as HTMLButtonElement).style.background =
-            "color-mix(in oklab, var(--accent) 12%, transparent)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor =
-            "color-mix(in oklab, var(--accent) 28%, transparent)";
+          (
+            e.currentTarget as HTMLButtonElement
+          ).style.background = `color-mix(in oklab, ${hoverBase} 12%, transparent)`;
+          (
+            e.currentTarget as HTMLButtonElement
+          ).style.borderColor = `color-mix(in oklab, ${hoverBase} 28%, transparent)`;
         }
       }}
       onMouseLeave={(e) => {
