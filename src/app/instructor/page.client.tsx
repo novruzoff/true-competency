@@ -20,6 +20,9 @@ type MeProfile = {
   first_name: string | null;
   last_name: string | null;
   role: string;
+  hospital: string | null;
+  country_name: string | null;
+  country_code: string | null;
 };
 
 type ProgressRow = { student_id: string; pct: number };
@@ -62,18 +65,53 @@ export default function InstructorClient() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [studentsQ, setStudentsQ] = useState("");
 
-  // Competencies (read-only modal)
-  const [compsOpen, setCompsOpen] = useState(false);
-  const [competencies, setCompetencies] = useState<Competency[]>([]);
-  const [compsLoading, setCompsLoading] = useState(false);
-  const [compsErr, setCompsErr] = useState<string | null>(null);
+  // --- Me + assign modal state ---
+  const [meProfile, setMeProfile] = useState<MeProfile | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Modal filters
-  const [compsQ, setCompsQ] = useState("");
-  const [compDiff, setCompDiff] = useState<
+  // Assign modal
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignErr, setAssignErr] = useState<string | null>(null);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [selectedTrainees, setSelectedTrainees] = useState<Set<string>>(
+    new Set()
+  );
+  const [traineesQ, setTraineesQ] = useState("");
+  const [assignDiff, setAssignDiff] = useState<
     "all" | "beginner" | "intermediate" | "expert"
   >("all");
-  const [compTags, setCompTags] = useState<Set<string>>(new Set());
+  const [assignTags, setAssignTags] = useState<Set<string>>(new Set());
+  const [assignQ, setAssignQ] = useState("");
+
+  // ----------- displayDr and initials -----------
+  const displayDr = useMemo(() => {
+    if (!meProfile) return "Instructor";
+    const ln = (meProfile.last_name ?? "").trim();
+    const fn = (meProfile.first_name ?? "").trim();
+    if (ln) return `Dr. ${ln}`;
+    if (fn) return `Dr. ${fn}`;
+    return "Instructor";
+  }, [meProfile]);
+
+  const initials = useMemo(() => {
+    const ln = (meProfile?.last_name ?? "").trim();
+    const fn = (meProfile?.first_name ?? "").trim();
+    const parts = [fn, ln].filter(Boolean);
+    if (parts.length) {
+      return (
+        parts
+          .map((p) => p[0]?.toUpperCase() ?? "")
+          .join("")
+          .slice(0, 2) || "DR"
+      );
+    }
+    const em = (meProfile?.email ?? "").trim();
+    if (em) return em[0]?.toUpperCase() ?? "DR";
+    return "DR";
+  }, [meProfile]);
+
+  // Competencies (used for assign modal)
+  const [competencies, setCompetencies] = useState<Competency[]>([]);
 
   // KPI widgets
   const [kpiActiveTrainees, setKpiActiveTrainees] = useState(0);
@@ -99,12 +137,32 @@ export default function InstructorClient() {
           router.replace("/signin?redirect=/instructor");
           return;
         }
+        setUserId(uid);
         const { data: me, error: meErr } = await supabase
           .from("profiles")
-          .select("id, email, first_name, last_name, role")
+          .select(
+            "id, email, first_name, last_name, role, hospital, country_name, country_code"
+          )
           .eq("id", uid)
           .single<MeProfile>();
         if (meErr) throw meErr;
+
+        let finalMe = me;
+
+        // If country_name is missing but code exists, fetch full name from countries table
+        if (!me.country_name && me.country_code) {
+          const { data: cRow } = await supabase
+            .from("countries")
+            .select("name")
+            .eq("code", me.country_code)
+            .maybeSingle<{ name: string }>();
+
+          if (cRow?.name) {
+            finalMe = { ...me, country_name: cRow.name };
+          }
+        }
+
+        setMeProfile(finalMe);
 
         const drName =
           (me?.last_name
@@ -267,16 +325,15 @@ export default function InstructorClient() {
     };
   }, [router]);
 
-  /* --- Fetch competencies whenever modal opens (always, not just first time) --- */
+  /* --- Fetch competencies whenever assign modal opens (always, not just first time) --- */
   useEffect(() => {
-    if (!compsOpen) return;
+    // load when assign modal that needs competencies is open
+    if (!assignOpen) return;
     let cancelled = false;
 
     (async () => {
       try {
-        setCompsErr(null);
-        setCompsLoading(true);
-
+        // No longer using compsErr/compsLoading for browse modal
         const { data: comps, error: cErr } = await supabase
           .from("competencies")
           .select("id, name, difficulty, tags")
@@ -294,25 +351,18 @@ export default function InstructorClient() {
 
         if (!cancelled) {
           setCompetencies(sorted);
-          // reset filters each time you open
-          setCompDiff("all");
-          setCompTags(new Set());
-          setCompsQ("");
         }
       } catch (e) {
-        if (!cancelled)
-          setCompsErr(
-            e instanceof Error ? e.message : "Failed to load competencies."
-          );
+        // No longer using compsErr/compsLoading for browse modal
       } finally {
-        if (!cancelled) setCompsLoading(false);
+        // No longer using compsErr/compsLoading for browse modal
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [compsOpen]);
+  }, [assignOpen]);
 
   /* --- Derived filters --- */
   const filteredStudents = useMemo(() => {
@@ -332,24 +382,36 @@ export default function InstructorClient() {
     return Array.from(bag).sort((a, b) => a.localeCompare(b));
   }, [competencies]);
 
-  const filteredComps = useMemo(() => {
-    let list = competencies;
-
-    if (compDiff !== "all") {
+  // Derived list of trainees for Assign modal
+  const filteredTraineesForAssign = useMemo(() => {
+    const q = traineesQ.trim().toLowerCase();
+    let list = students;
+    if (q) {
       list = list.filter(
-        (c) => (c.difficulty ?? "").toLowerCase() === compDiff
+        (s) =>
+          s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q)
       );
     }
+    return list;
+  }, [traineesQ, students]);
 
-    if (compTags.size > 0) {
+  // Derived list of competencies for Assign modal
+  const assignableComps = useMemo(() => {
+    let list = competencies;
+
+    if (assignDiff !== "all") {
+      list = list.filter(
+        (c) => (c.difficulty ?? "").toLowerCase() === assignDiff
+      );
+    }
+    if (assignTags.size > 0) {
       list = list.filter((c) => {
         const set = new Set(c.tags ?? []);
-        for (const t of compTags) if (!set.has(t)) return false;
+        for (const t of assignTags) if (!set.has(t)) return false;
         return true;
       });
     }
-
-    const q = compsQ.trim().toLowerCase();
+    const q = assignQ.trim().toLowerCase();
     if (q) {
       list = list.filter((c) => {
         const hay =
@@ -361,28 +423,80 @@ export default function InstructorClient() {
         return hay.toLowerCase().includes(q);
       });
     }
-
     return list;
-  }, [competencies, compDiff, compTags, compsQ]);
+  }, [competencies, assignDiff, assignTags, assignQ]);
 
   /* --- UI helpers --- */
-  const badgeForDiff = (d: string | null) => {
-    const k = (d ?? "").toLowerCase();
-    if (k === "beginner") return "bg-[color:var(--ok)] text-black";
-    if (k === "intermediate") return "bg-[color:var(--warn)] text-black";
-    if (k === "expert") return "bg-[color:var(--err)] text-black";
-    return "bg-[var(--border)] text-[var(--foreground)]/70";
-  };
 
-  const toggleTag = (t: string) =>
-    setCompTags((prev) => {
+  const toggleAssignTag = (t: string) =>
+    setAssignTags((prev) => {
       const next = new Set(prev);
       if (next.has(t)) next.delete(t);
       else next.add(t);
       return next;
     });
 
+  const toggleTrainee = (id: string) =>
+    setSelectedTrainees((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const selectAllFilteredTrainees = () => {
+    setSelectedTrainees(new Set(filteredTraineesForAssign.map((t) => t.id)));
+  };
+  const clearSelectedTrainees = () => setSelectedTrainees(new Set());
+
   /* ---------------- Render ---------------- */
+  async function assignToSelected() {
+    try {
+      setAssignErr(null);
+      setAssignLoading(true);
+      if (selectedTrainees.size === 0)
+        throw new Error("Select at least one trainee.");
+      if (assignableComps.length === 0)
+        throw new Error("No competencies match your filters.");
+
+      const { data: userRes, error: getUserErr } =
+        await supabase.auth.getUser();
+      if (getUserErr) throw getUserErr;
+      const caller = userRes.user?.id;
+      if (!caller) throw new Error("Not authenticated.");
+
+      const payload: AssignRow[] & { assigned_by?: string }[] = [];
+      for (const sid of selectedTrainees) {
+        for (const c of assignableComps) {
+          payload.push({
+            student_id: sid,
+            competency_id: c.id,
+            assigned_by: caller,
+          } as any);
+        }
+      }
+
+      // Upsert with conflict on (student_id, competency_id)
+      const { error: upErr } = await supabase
+        .from("competency_assignments")
+        .upsert(payload, {
+          onConflict: "student_id,competency_id",
+          ignoreDuplicates: true,
+        });
+      if (upErr) throw upErr;
+
+      setAssignOpen(false);
+      setSelectedTrainees(new Set());
+      setAssignTags(new Set());
+      setAssignDiff("all");
+      setAssignQ("");
+    } catch (e) {
+      setAssignErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAssignLoading(false);
+    }
+  }
+
   return (
     <main className="bg-[var(--background)] text-[var(--foreground)]">
       {/* Header */}
@@ -398,14 +512,123 @@ export default function InstructorClient() {
             </p>
           </div>
 
-          <button
-            onClick={() => setCompsOpen(true)}
-            className="rounded-xl px-3 py-2 text-sm text-white"
-            style={{ background: "var(--accent)" }}
-            title="Browse all competencies"
-          >
-            Browse competencies
-          </button>
+          {/* actions moved to profile card */}
+          <div />
+        </div>
+      </section>
+
+      {/* Profile Hero (match trainee look) */}
+      <section className="mx-auto max-w-6xl px-6 pt-6 mb-5">
+        <div
+          className="rounded-2xl border bg-[var(--surface)] overflow-hidden transition will-change-transform"
+          style={{
+            borderColor:
+              "color-mix(in oklab, var(--accent) 40%, var(--border))",
+            boxShadow:
+              "0 0 0 2px color-mix(in oklab, var(--accent) 22%, transparent), 0 8px 28px color-mix(in oklab, var(--accent) 18%, transparent)",
+          }}
+        >
+          <div className="px-5 md:px-6 py-5 md:py-6">
+            <div className="flex items-start justify-between gap-4">
+              {/* left: avatar + text */}
+              <div className="flex items-center gap-4">
+                <div
+                  className="h-16 w-16 md:h-20 md:w-20 rounded-full flex items-center justify-center text-white text-xl md:text-2xl font-semibold shadow-md ring-4 ring-[var(--surface)]"
+                  style={{ background: "var(--accent)" }}
+                >
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl md:text-2xl font-semibold tracking-tight break-words">
+                      {displayDr}
+                    </h2>
+                    <span
+                      className="text-[10px] md:text-xs font-medium rounded-full px-2 py-0.5 border bg-[var(--field)] text-[var(--foreground)]/90"
+                      style={{
+                        background:
+                          "color-mix(in oklab, var(--accent) 15%, transparent)",
+                        borderColor:
+                          "color-mix(in oklab, var(--accent) 35%, transparent)",
+                        color: "var(--accent)",
+                      }}
+                    >
+                      Active Instructor
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs md:text-sm text-[var(--muted)]">
+                    Coach trainees, assign competencies, and review progress.
+                  </p>
+                  <div className="mt-1 flex items-center gap-4 text-xs md:text-sm text-[var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      {/* building icon */}
+                      <svg
+                        className="h-3.5 w-3.5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden
+                      >
+                        <path
+                          d="M4 21h16M6 21V7a2 2 0 0 1 2-2h8v16M10 9h3M10 13h3M10 17h3"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      {meProfile?.hospital ?? "—"}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      {/* pin icon */}
+                      <svg
+                        className="h-3.5 w-3.5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden
+                      >
+                        <path
+                          d="M12 21s6-5.686 6-10a6 6 0 1 0-12 0c0 4.314 6 10 6 10Z"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="11"
+                          r="2"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                      {meProfile?.country_name ||
+                        meProfile?.country_code ||
+                        "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* right: Assign CTA */}
+              <div className="shrink-0 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border-2 px-3.5 py-2 text-sm font-medium will-change-transform transition-transform duration-500 ease-out active:scale-[0.99] hover:scale-[1.03] hover:shadow-lg"
+                  style={{
+                    background: "var(--accent)",
+                    color: "#fff",
+                    borderColor: "var(--accent)",
+                    transition:
+                      "transform 300ms cubic-bezier(0.22,1,0.36,1), background-color 220ms ease, color 220ms ease, border-color 220ms ease",
+                  }}
+                  title="Assign or bulk-assign competencies"
+                >
+                  + Assign
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -478,7 +701,7 @@ export default function InstructorClient() {
               <button
                 key={s.id}
                 onClick={() => router.push(`/instructor/trainee/${s.id}`)}
-                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:shadow-md transition"
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:shadow-md transition will-change-transform transition-transform hover:scale-[1.01]"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
@@ -543,71 +766,120 @@ export default function InstructorClient() {
         </div>
       </section>
 
-      {/* Browse Competencies (read-only) */}
-      {compsOpen && (
-        <Modal onClose={() => setCompsOpen(false)} title="All competencies">
+      {/* Assign Modal */}
+      {assignOpen && (
+        <Modal
+          onClose={() => setAssignOpen(false)}
+          title="Assign competencies to trainee(s)"
+        >
           <p className="text-sm text-[var(--muted)]">
-            Read-only list. Trainees now self-enroll from their dashboard.
+            Select one or more trainees, then filter competencies and assign in
+            bulk.
           </p>
 
-          {/* Controls */}
-          <div className="mt-3 flex flex-col gap-3">
-            {/* Difficulty chips */}
+          {/* Trainee picker */}
+          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--field)] p-2">
+            <div className="flex items-center gap-2">
+              <input
+                value={traineesQ}
+                onChange={(e) => setTraineesQ(e.target.value)}
+                placeholder="Search trainees…"
+                className="flex-1 bg-transparent px-2 py-1 text-sm outline-none placeholder:[color:var(--muted)]"
+              />
+              <button
+                type="button"
+                onClick={selectAllFilteredTrainees}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={clearSelectedTrainees}
+                className="rounded-lg border px-2 py-1 text-xs border-[color:var(--err)] text-[color:var(--err)] bg-[var(--surface)] hover:bg-[var(--field)]"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="mt-2 max-h-40 overflow-auto">
+              {filteredTraineesForAssign.map((t) => {
+                const checked = selectedTrainees.has(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className="flex items-center gap-2 px-2 py-1 text-sm border-b border-[var(--border)] last:border-0"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleTrainee(t.id)}
+                      className="h-4 w-4"
+                    />
+                    <span className="truncate">
+                      {t.name}{" "}
+                      <span className="text-[var(--muted)]">• {t.email}</span>
+                    </span>
+                  </label>
+                );
+              })}
+              {filteredTraineesForAssign.length === 0 && (
+                <div className="px-2 py-2 text-xs text-[var(--muted)]">
+                  No trainees match.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Competency filters (re-using colors and chips) */}
+          <div className="mt-4 flex flex-col gap-3">
             <div className="flex items-center gap-2 text-xs">
               <FilterChip
                 label="All"
-                active={compDiff === "all"}
-                onClick={() => setCompDiff("all")}
+                active={assignDiff === "all"}
+                onClick={() => setAssignDiff("all")}
               />
               <FilterChip
                 label="Beginner"
                 color="var(--ok)"
-                active={compDiff === "beginner"}
-                onClick={() => setCompDiff("beginner")}
+                active={assignDiff === "beginner"}
+                onClick={() => setAssignDiff("beginner")}
               />
               <FilterChip
                 label="Intermediate"
                 color="var(--warn)"
-                active={compDiff === "intermediate"}
-                onClick={() => setCompDiff("intermediate")}
+                active={assignDiff === "intermediate"}
+                onClick={() => setAssignDiff("intermediate")}
               />
               <FilterChip
                 label="Expert"
                 color="var(--err)"
-                active={compDiff === "expert"}
-                onClick={() => setCompDiff("expert")}
+                active={assignDiff === "expert"}
+                onClick={() => setAssignDiff("expert")}
               />
-              {compsLoading && (
-                <span className="ms-auto text-xs text-[var(--muted)]">
-                  Loading…
-                </span>
-              )}
             </div>
 
-            {/* Search */}
             <div className="rounded-xl border border-[var(--border)] bg-[var(--field)]">
               <input
-                value={compsQ}
-                onChange={(e) => setCompsQ(e.target.value)}
-                placeholder="Search by name, tag, or difficulty…"
+                value={assignQ}
+                onChange={(e) => setAssignQ(e.target.value)}
+                placeholder="Search competencies…"
                 className="w-full bg-transparent px-3 py-2 text-sm outline-none placeholder:[color:var(--muted)]"
               />
             </div>
 
-            {/* Tag multi-select */}
             <div className="flex flex-wrap gap-1">
               {allCompTags.map((t) => (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => toggleTag(t)}
+                  onClick={() => toggleAssignTag(t)}
                   className={[
                     "text-[10px] rounded-full border px-2 py-0.5 transition",
-                    compTags.has(t)
+                    assignTags.has(t)
                       ? "bg-[var(--accent)] text-white border-transparent"
                       : "bg-[var(--surface)] text-[var(--foreground)]/80 border-[var(--border)] hover:bg-[var(--field)]",
                   ].join(" ")}
-                  title={t}
                 >
                   {t}
                 </button>
@@ -620,48 +892,83 @@ export default function InstructorClient() {
             </div>
           </div>
 
-          {/* List */}
-          {compsErr && (
+          {/* Preview list (compact) */}
+          <div className="mt-3 rounded-xl border border-[var(--border)]">
+            <div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--muted)] border-b border-[var(--border)]">
+              <span>{assignableComps.length} competencies match</span>
+              <span>{selectedTrainees.size} trainee(s) selected</span>
+            </div>
+            <ul className="max-h-40 overflow-auto">
+              {assignableComps.slice(0, 50).map((c) => (
+                <li
+                  key={c.id}
+                  className="px-3 py-2 text-sm border-b border-[var(--border)] last:border-0 flex items-start justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {c.name ?? "Untitled competency"}
+                    </div>
+                    {c.tags && c.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {c.tags.slice(0, 6).map((t) => (
+                          <span
+                            key={t}
+                            className="text-[10px] rounded-full bg-[var(--surface)] border border-[var(--border)] px-2 py-0.5 text-[var(--foreground)]/85 whitespace-nowrap"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {c.difficulty && (
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        (c.difficulty ?? "").toLowerCase() === "beginner"
+                          ? "bg-[color:var(--ok)] text-black"
+                          : (c.difficulty ?? "").toLowerCase() ===
+                            "intermediate"
+                          ? "bg-[color:var(--warn)] text-black"
+                          : (c.difficulty ?? "").toLowerCase() === "expert"
+                          ? "bg-[color:var(--err)] text-black"
+                          : "bg-[var(--border)] text-[var(--foreground)]/70"
+                      }`}
+                    >
+                      {c.difficulty}
+                    </span>
+                  )}
+                </li>
+              ))}
+              {assignableComps.length > 50 && (
+                <li className="px-3 py-1 text-xs text-[var(--muted)]">
+                  Showing first 50…
+                </li>
+              )}
+            </ul>
+          </div>
+
+          {assignErr && (
             <div className="mt-3 rounded-xl border border-red-900/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-              {compsErr}
+              {assignErr}
             </div>
           )}
 
-          <ListBox>
-            {filteredComps.map((c) => (
-              <ListRow key={c.id}>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {c.name ?? "Untitled competency"}
-                  </div>
-                  <div className="text-xs text-[var(--muted)]">
-                    {c.difficulty ?? "—"}
-                    {c.tags?.length
-                      ? ` • ${c.tags.slice(0, 4).join(", ")}`
-                      : ""}
-                  </div>
-                </div>
-                {c.difficulty && (
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badgeForDiff(
-                      c.difficulty
-                    )}`}
-                  >
-                    {c.difficulty}
-                  </span>
-                )}
-              </ListRow>
-            ))}
-            {!compsLoading && filteredComps.length === 0 && (
-              <EmptyRow>
-                No competencies match your filters.
-                <br />
-                <span className="text-[var(--muted)]">
-                  If you expect items here, they might be hidden by RLS.
-                </span>
-              </EmptyRow>
-            )}
-          </ListBox>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button
+              onClick={() => setAssignOpen(false)}
+              className="rounded-lg border px-3 py-2 text-sm border-[color:var(--err)] text-[color:var(--err)] bg-[var(--surface)] hover:bg-[var(--field)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={assignToSelected}
+              disabled={assignLoading}
+              className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-60"
+              style={{ background: "var(--accent)" }}
+            >
+              {assignLoading ? "Assigning…" : "Assign to selected"}
+            </button>
+          </div>
         </Modal>
       )}
     </main>
@@ -741,7 +1048,7 @@ function ListBox({ children }: { children: React.ReactNode }) {
 }
 function ListRow({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex items-center justify-between gap-3 px-3 py-2 border-b border-[var(--border)] last:border-0">
+    <li className="flex items-center justify-between gap-3 px-3 py-2 border-b border-[var(--border)] last:border-0 transition hover:shadow-md">
       {children}
     </li>
   );
@@ -770,11 +1077,13 @@ function FilterChip({
         active
           ? "shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
           : "",
+        "hover:bg-[color:var(--chip)] hover:text-black",
       ].join(" ")}
       style={{
         borderColor: "var(--border)",
         background: active ? color ?? "var(--field)" : "var(--surface)",
         color: active ? "#000" : "var(--foreground)",
+        ...(color ? ({ ["--chip" as any]: color } as any) : {}),
       }}
     >
       {label}
