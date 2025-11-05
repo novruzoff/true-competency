@@ -308,7 +308,7 @@ export default function CommitteeHome() {
 
           <button
             onClick={() => setProposeOpen(true)}
-            className="rounded-xl px-3 py-2 text-sm text-white transition-transform transform hover:scale-[1.15] hover:shadow-[0_0_12px_var(--accent)]"
+            className="rounded-xl px-3 py-2 text-sm text-white transition-transform duration-500 ease-out hover:scale-[1.05] hover:shadow-[0_0_12px_var(--accent)]"
             style={{ background: "var(--accent)" }}
             title="Propose a new competency"
           >
@@ -349,7 +349,7 @@ export default function CommitteeHome() {
         )}
       </section>
 
-      {/* Body: flat grid, no difficulty headers; cards have colored top bar */}
+      {/* Body: flat grid, no difficulty headers; now as excel-style table */}
       <section className="mx-auto max-w-6xl px-6 pb-10">
         {loading && <div className="text-[var(--muted)]">Loading…</div>}
         {err && (
@@ -359,38 +359,73 @@ export default function CommitteeHome() {
         )}
 
         {!loading && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {list.map((c) => (
-              <article
-                key={c.id}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
-              >
-                {/* top color bar tied to difficulty */}
-                <div style={{ background: diffVar(c.difficulty), height: 6 }} />
-
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold leading-snug">{c.name}</h3>
-                    <DifficultyPill value={c.difficulty} />
-                  </div>
-
-                  {!!(c.tags && c.tags.length) && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {c.tags.slice(0, 8).map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full border border-[var(--border)] bg-[var(--field)] px-2 py-0.5 text-[11px] text-[var(--muted)]"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Review link removed */}
-                </div>
-              </article>
-            ))}
+          <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+            <table className="min-w-full text-sm">
+              <thead className="bg-[var(--field)]/40">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
+                    #
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
+                    Name
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
+                    Difficulty
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
+                    Tags
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
+                    Created
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((c, idx) => (
+                  <tr
+                    key={c.id}
+                    className="border-t border-[var(--border)] hover:bg-[color:var(--accent)]/3 transition-colors"
+                  >
+                    <td className="px-3 py-2 align-middle text-xs text-[var(--muted)] w-12">
+                      {idx + 1}
+                    </td>
+                    <td className="px-3 py-2 align-middle font-medium text-[var(--foreground)]">
+                      {c.name}
+                    </td>
+                    <td className="px-3 py-2 align-middle w-36">
+                      <span
+                        className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                        style={{
+                          background: diffVar(c.difficulty),
+                          color: "#000",
+                        }}
+                      >
+                        {c.difficulty}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 align-middle">
+                      {c.tags && c.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-w-[360px]">
+                          {c.tags.map((t) => (
+                            <span
+                              key={t}
+                              className="rounded-full border border-[var(--border)] bg-[var(--field)] px-2 py-0.5 text-[11px] text-[var(--muted)]"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[var(--muted)] text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-middle text-xs text-[var(--muted)] whitespace-nowrap w-36">
+                      {new Date(c.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
