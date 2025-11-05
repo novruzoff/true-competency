@@ -82,6 +82,9 @@ export default function InstructorClient() {
   >("all");
   const [assignTags, setAssignTags] = useState<Set<string>>(new Set());
   const [assignQ, setAssignQ] = useState("");
+  const [selectedCompetencies, setSelectedCompetencies] = useState<Set<string>>(
+    new Set()
+  );
 
   // ----------- displayDr and initials -----------
   const displayDr = useMemo(() => {
@@ -444,6 +447,14 @@ export default function InstructorClient() {
       return next;
     });
 
+  const toggleSelectedCompetency = (id: string) =>
+    setSelectedCompetencies((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   const selectAllFilteredTrainees = () => {
     setSelectedTrainees(new Set(filteredTraineesForAssign.map((t) => t.id)));
   };
@@ -456,18 +467,21 @@ export default function InstructorClient() {
       setAssignLoading(true);
       if (selectedTrainees.size === 0)
         throw new Error("Select at least one trainee.");
-      if (assignableComps.length === 0)
-        throw new Error("No competencies match your filters.");
-
       const { data: userRes, error: getUserErr } =
         await supabase.auth.getUser();
       if (getUserErr) throw getUserErr;
       const caller = userRes.user?.id;
       if (!caller) throw new Error("Not authenticated.");
 
+      const compsToAssign =
+        selectedCompetencies.size > 0
+          ? assignableComps.filter((c) => selectedCompetencies.has(c.id))
+          : assignableComps;
+      if (compsToAssign.length === 0)
+        throw new Error("No competencies selected or matching filters.");
       const payload: AssignRow[] & { assigned_by?: string }[] = [];
       for (const sid of selectedTrainees) {
-        for (const c of assignableComps) {
+        for (const c of compsToAssign) {
           payload.push({
             student_id: sid,
             competency_id: c.id,
@@ -490,6 +504,7 @@ export default function InstructorClient() {
       setAssignTags(new Set());
       setAssignDiff("all");
       setAssignQ("");
+      setSelectedCompetencies(new Set());
     } catch (e) {
       setAssignErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -768,208 +783,249 @@ export default function InstructorClient() {
 
       {/* Assign Modal */}
       {assignOpen && (
-        <Modal
-          onClose={() => setAssignOpen(false)}
-          title="Assign competencies to trainee(s)"
-        >
-          <p className="text-sm text-[var(--muted)]">
-            Select one or more trainees, then filter competencies and assign in
-            bulk.
-          </p>
-
-          {/* Trainee picker */}
-          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--field)] p-2">
-            <div className="flex items-center gap-2">
-              <input
-                value={traineesQ}
-                onChange={(e) => setTraineesQ(e.target.value)}
-                placeholder="Search trainees…"
-                className="flex-1 bg-transparent px-2 py-1 text-sm outline-none placeholder:[color:var(--muted)]"
-              />
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setAssignOpen(false)}
+          />
+          <div className="absolute left-1/2 top-12 -translate-x-1/2 w-[min(100%,56rem)] mx-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+              <h3 className="text-lg font-semibold">
+                Assign competencies to trainee(s)
+              </h3>
               <button
                 type="button"
-                onClick={selectAllFilteredTrainees}
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
+                onClick={() => setAssignOpen(false)}
+                className="rounded-lg border border-[var(--border)] px-2 py-1 text-sm hover:bg-[var(--field)]"
               >
-                Select all
-              </button>
-              <button
-                type="button"
-                onClick={clearSelectedTrainees}
-                className="rounded-lg border px-2 py-1 text-xs border-[color:var(--err)] text-[color:var(--err)] bg-[var(--surface)] hover:bg-[var(--field)]"
-              >
-                Clear
+                ✕
               </button>
             </div>
 
-            <div className="mt-2 max-h-40 overflow-auto">
-              {filteredTraineesForAssign.map((t) => {
-                const checked = selectedTrainees.has(t.id);
-                return (
-                  <label
-                    key={t.id}
-                    className="flex items-center gap-2 px-2 py-1 text-sm border-b border-[var(--border)] last:border-0"
+            <div className="p-5 flex flex-col gap-4">
+              {/* trainee picker */}
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--field)] p-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={traineesQ}
+                    onChange={(e) => setTraineesQ(e.target.value)}
+                    placeholder="Search trainees…"
+                    className="flex-1 bg-transparent px-2 py-1 text-sm outline-none placeholder:[color:var(--muted)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={selectAllFilteredTrainees}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs hover:bg-[var(--field)]"
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleTrainee(t.id)}
-                      className="h-4 w-4"
-                    />
-                    <span className="truncate">
-                      {t.name}{" "}
-                      <span className="text-[var(--muted)]">• {t.email}</span>
-                    </span>
-                  </label>
-                );
-              })}
-              {filteredTraineesForAssign.length === 0 && (
-                <div className="px-2 py-2 text-xs text-[var(--muted)]">
-                  No trainees match.
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSelectedTrainees}
+                    className="rounded-lg border px-2 py-1 text-xs border-[color:var(--err)] text-[color:var(--err)] bg-[var(--surface)] hover:bg-[var(--field)]"
+                  >
+                    Clear
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Competency filters (re-using colors and chips) */}
-          <div className="mt-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-xs">
-              <FilterChip
-                label="All"
-                active={assignDiff === "all"}
-                onClick={() => setAssignDiff("all")}
-              />
-              <FilterChip
-                label="Beginner"
-                color="var(--ok)"
-                active={assignDiff === "beginner"}
-                onClick={() => setAssignDiff("beginner")}
-              />
-              <FilterChip
-                label="Intermediate"
-                color="var(--warn)"
-                active={assignDiff === "intermediate"}
-                onClick={() => setAssignDiff("intermediate")}
-              />
-              <FilterChip
-                label="Expert"
-                color="var(--err)"
-                active={assignDiff === "expert"}
-                onClick={() => setAssignDiff("expert")}
-              />
-            </div>
-
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--field)]">
-              <input
-                value={assignQ}
-                onChange={(e) => setAssignQ(e.target.value)}
-                placeholder="Search competencies…"
-                className="w-full bg-transparent px-3 py-2 text-sm outline-none placeholder:[color:var(--muted)]"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-1">
-              {allCompTags.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => toggleAssignTag(t)}
-                  className={[
-                    "text-[10px] rounded-full border px-2 py-0.5 transition",
-                    assignTags.has(t)
-                      ? "bg-[var(--accent)] text-white border-transparent"
-                      : "bg-[var(--surface)] text-[var(--foreground)]/80 border-[var(--border)] hover:bg-[var(--field)]",
-                  ].join(" ")}
-                >
-                  {t}
-                </button>
-              ))}
-              {allCompTags.length === 0 && (
-                <span className="text-xs text-[var(--muted)]">
-                  No tags available.
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Preview list (compact) */}
-          <div className="mt-3 rounded-xl border border-[var(--border)]">
-            <div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--muted)] border-b border-[var(--border)]">
-              <span>{assignableComps.length} competencies match</span>
-              <span>{selectedTrainees.size} trainee(s) selected</span>
-            </div>
-            <ul className="max-h-40 overflow-auto">
-              {assignableComps.slice(0, 50).map((c) => (
-                <li
-                  key={c.id}
-                  className="px-3 py-2 text-sm border-b border-[var(--border)] last:border-0 flex items-start justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      {c.name ?? "Untitled competency"}
-                    </div>
-                    {c.tags && c.tags.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {c.tags.slice(0, 6).map((t) => (
-                          <span
-                            key={t}
-                            className="text-[10px] rounded-full bg-[var(--surface)] border border-[var(--border)] px-2 py-0.5 text-[var(--foreground)]/85 whitespace-nowrap"
-                          >
-                            {t}
+                <div className="mt-2 max-h-36 overflow-auto rounded-lg bg-[var(--surface)] border border-[var(--border)]/60">
+                  {filteredTraineesForAssign.map((t) => {
+                    const checked = selectedTrainees.has(t.id);
+                    return (
+                      <label
+                        key={t.id}
+                        className="flex items-center gap-2 px-2 py-1 text-sm border-b border-[var(--border)] last:border-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleTrainee(t.id)}
+                          className="h-4 w-4"
+                        />
+                        <span className="truncate">
+                          {t.name}{" "}
+                          <span className="text-[var(--muted)]">
+                            • {t.email}
                           </span>
-                        ))}
-                      </div>
-                    )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {filteredTraineesForAssign.length === 0 && (
+                    <div className="px-2 py-2 text-xs text-[var(--muted)]">
+                      No trainees match.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* filters like trainee modal */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <FilterChip
+                    label="All"
+                    active={assignDiff === "all"}
+                    onClick={() => setAssignDiff("all")}
+                  />
+                  <FilterChip
+                    label="Beginner"
+                    color="var(--ok)"
+                    active={assignDiff === "beginner"}
+                    onClick={() => setAssignDiff("beginner")}
+                  />
+                  <FilterChip
+                    label="Intermediate"
+                    color="var(--warn)"
+                    active={assignDiff === "intermediate"}
+                    onClick={() => setAssignDiff("intermediate")}
+                  />
+                  <FilterChip
+                    label="Expert"
+                    color="var(--err)"
+                    active={assignDiff === "expert"}
+                    onClick={() => setAssignDiff("expert")}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--field)] w-full">
+                    <input
+                      value={assignQ}
+                      onChange={(e) => setAssignQ(e.target.value)}
+                      placeholder="Search competencies…"
+                      className="w-full bg-transparent px-3 py-2 text-sm outline-none placeholder:[color:var(--muted)]"
+                    />
                   </div>
-                  {c.difficulty && (
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        (c.difficulty ?? "").toLowerCase() === "beginner"
-                          ? "bg-[color:var(--ok)] text-black"
-                          : (c.difficulty ?? "").toLowerCase() ===
-                            "intermediate"
-                          ? "bg-[color:var(--warn)] text-black"
-                          : (c.difficulty ?? "").toLowerCase() === "expert"
-                          ? "bg-[color:var(--err)] text-black"
-                          : "bg-[var(--border)] text-[var(--foreground)]/70"
-                      }`}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignDiff("all");
+                      setAssignTags(new Set());
+                      setAssignQ("");
+                    }}
+                    className="rounded-xl border border-[var(--err)] text-[var(--err)] bg-[var(--surface)] px-3 py-2 text-sm hover:bg-[var(--field)] transition hover:scale-[1.02] active:scale-[0.99]"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {allCompTags.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleAssignTag(t)}
+                      className={[
+                        "text-[10px] rounded-full border px-2 py-0.5 transition transform hover:scale-[1.03]",
+                        assignTags.has(t)
+                          ? "text-white border-transparent bg-[var(--accent)]"
+                          : "text-[var(--foreground)]/80 bg-[var(--surface)] border-[var(--border)]",
+                      ].join(" ")}
                     >
-                      {c.difficulty}
+                      {t}
+                    </button>
+                  ))}
+                  {allCompTags.length === 0 && (
+                    <span className="text-xs text-[var(--muted)]">
+                      No tags available.
                     </span>
                   )}
-                </li>
-              ))}
-              {assignableComps.length > 50 && (
-                <li className="px-3 py-1 text-xs text-[var(--muted)]">
-                  Showing first 50…
-                </li>
+                </div>
+              </div>
+
+              {/* competency list with checkboxes */}
+              <div className="rounded-xl border border-[var(--border)] max-h-64 overflow-auto">
+                <div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--muted)] border-b border-[var(--border)] bg-[var(--surface)]/70">
+                  <span>{assignableComps.length} competencies match</span>
+                  <span>{selectedTrainees.size} trainee(s) selected</span>
+                </div>
+                <ul>
+                  {assignableComps.slice(0, 80).map((c) => (
+                    <li
+                      key={c.id}
+                      className="flex items-start gap-3 px-3 py-2 border-b border-[var(--border)] last:border-0"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCompetencies.has(c.id)}
+                        onChange={() => toggleSelectedCompetency(c.id)}
+                        className="mt-1 h-4 w-4"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium truncate">
+                            {c.name ?? "Untitled competency"}
+                          </div>
+                          {c.difficulty && (
+                            <span
+                              className={
+                                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                                ((c.difficulty ?? "").toLowerCase() ===
+                                "beginner"
+                                  ? "bg-[color:var(--ok)] text-black"
+                                  : (c.difficulty ?? "").toLowerCase() ===
+                                    "intermediate"
+                                  ? "bg-[color:var(--warn)] text-black"
+                                  : (c.difficulty ?? "").toLowerCase() ===
+                                    "expert"
+                                  ? "bg-[color:var(--err)] text-black"
+                                  : "bg-[var(--border)] text-[var(--foreground)]/70")
+                              }
+                            >
+                              {c.difficulty}
+                            </span>
+                          )}
+                        </div>
+                        {c.tags && c.tags.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {c.tags.slice(0, 6).map((t) => (
+                              <span
+                                key={t}
+                                className="text-[10px] rounded-full bg-[var(--surface)] border border-[var(--border)] px-2 py-0.5 text-[var(--foreground)]/85"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                  {assignableComps.length === 0 && (
+                    <li className="px-3 py-4 text-xs text-[var(--muted)]">
+                      No competencies match your filters.
+                    </li>
+                  )}
+                  {assignableComps.length > 80 && (
+                    <li className="px-3 py-1 text-[10px] text-[var(--muted)]">
+                      Showing first 80…
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {assignErr && (
+                <div className="rounded-xl border border-red-900/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                  {assignErr}
+                </div>
               )}
-            </ul>
-          </div>
 
-          {assignErr && (
-            <div className="mt-3 rounded-xl border border-red-900/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-              {assignErr}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setAssignOpen(false)}
+                  className="rounded-lg border px-3 py-2 text-sm border-[color:var(--err)] text-[color:var(--err)] bg-[var(--surface)] hover:bg-[var(--field)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={assignToSelected}
+                  disabled={assignLoading}
+                  className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-60"
+                  style={{ background: "var(--accent)" }}
+                >
+                  {assignLoading ? "Assigning…" : "Assign to selected"}
+                </button>
+              </div>
             </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <button
-              onClick={() => setAssignOpen(false)}
-              className="rounded-lg border px-3 py-2 text-sm border-[color:var(--err)] text-[color:var(--err)] bg-[var(--surface)] hover:bg-[var(--field)]"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={assignToSelected}
-              disabled={assignLoading}
-              className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-60"
-              style={{ background: "var(--accent)" }}
-            >
-              {assignLoading ? "Assigning…" : "Assign to selected"}
-            </button>
           </div>
-        </Modal>
+        </div>
       )}
     </main>
   );
@@ -1068,22 +1124,41 @@ function FilterChip({
   active: boolean;
   color?: string;
 }) {
+  // Use provided difficulty color for hover when available, else fall back to accent
+  const hoverBase = color ?? "var(--accent)";
   return (
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={(e) => {
+        if (!active) {
+          (
+            e.currentTarget as HTMLButtonElement
+          ).style.background = `color-mix(in oklab, ${hoverBase} 12%, transparent)`;
+          (
+            e.currentTarget as HTMLButtonElement
+          ).style.borderColor = `color-mix(in oklab, ${hoverBase} 28%, transparent)`;
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            "var(--surface)";
+          (e.currentTarget as HTMLButtonElement).style.borderColor =
+            "var(--border)";
+        }
+      }}
       className={[
-        "px-3 py-1.5 rounded-full border text-xs font-medium transition",
+        "px-3 py-1.5 rounded-full border text-xs font-medium transition transform",
+        "hover:scale-[1.03]",
         active
           ? "shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
           : "",
-        "hover:bg-[color:var(--chip)] hover:text-black",
       ].join(" ")}
       style={{
         borderColor: "var(--border)",
         background: active ? color ?? "var(--field)" : "var(--surface)",
         color: active ? "#000" : "var(--foreground)",
-        ...(color ? ({ ["--chip" as any]: color } as any) : {}),
       }}
     >
       {label}
