@@ -67,7 +67,6 @@ export default function InstructorClient() {
 
   // --- Me + assign modal state ---
   const [meProfile, setMeProfile] = useState<MeProfile | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
 
   // Assign modal
   const [assignOpen, setAssignOpen] = useState(false);
@@ -140,7 +139,6 @@ export default function InstructorClient() {
           router.replace("/signin?redirect=/instructor");
           return;
         }
-        setUserId(uid);
         const { data: me, error: meErr } = await supabase
           .from("profiles")
           .select(
@@ -479,14 +477,19 @@ export default function InstructorClient() {
           : assignableComps;
       if (compsToAssign.length === 0)
         throw new Error("No competencies selected or matching filters.");
-      const payload: AssignRow[] & { assigned_by?: string }[] = [];
+      const payload: Array<{
+        student_id: string;
+        competency_id: string;
+        assigned_by: string;
+      }> = [];
+
       for (const sid of selectedTrainees) {
         for (const c of compsToAssign) {
           payload.push({
             student_id: sid,
             competency_id: c.id,
             assigned_by: caller,
-          } as any);
+          });
         }
       }
 
@@ -1067,52 +1070,6 @@ function KPIInline({
 }
 
 /* Reusable modal + list bits */
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-[var(--border)] bg-[var(--field)] px-2 py-1 text-sm"
-          >
-            Close
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ListBox({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-[var(--border)]">
-      <ul>{children}</ul>
-    </div>
-  );
-}
-function ListRow({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="flex items-center justify-between gap-3 px-3 py-2 border-b border-[var(--border)] last:border-0 transition hover:shadow-md">
-      {children}
-    </li>
-  );
-}
-function EmptyRow({ children }: { children: React.ReactNode }) {
-  return <li className="px-3 py-6 text-sm text-[var(--muted)]">{children}</li>;
-}
-
 function FilterChip({
   label,
   onClick,
