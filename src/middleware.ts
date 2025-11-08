@@ -62,7 +62,7 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Unauthed users → redirect if hitting protected pages
-  const needsAuth = PROTECT_PREFIXES.some((p) => pathname.startsWith(p)) || pathname === "/";
+  const needsAuth = PROTECT_PREFIXES.some((p) => pathname.startsWith(p));
   if (!user) {
     if (needsAuth) {
       const url = req.nextUrl.clone();
