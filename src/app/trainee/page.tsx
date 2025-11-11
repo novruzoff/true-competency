@@ -1242,7 +1242,7 @@ function FilterChip({
       style={{
         borderColor: "var(--border)",
         background: active ? color ?? "var(--field)" : "var(--surface)",
-        color: active ? "#000" : "var(--foreground)",
+        color: active ? "var(--foreground)" : "var(--foreground)",
       }}
     >
       {label}
