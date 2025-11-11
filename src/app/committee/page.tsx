@@ -157,6 +157,7 @@ export default function CommitteeHome() {
   const [name, setName] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("Intermediate");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [proposeReason, setProposeReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -274,6 +275,7 @@ export default function CommitteeHome() {
         name: nameTrim,
         difficulty,
         tags: selectedTags,
+        justification: proposeReason.trim() || null,
       });
       if (error) throw error;
 
@@ -281,6 +283,7 @@ export default function CommitteeHome() {
       setName("");
       setSelectedTags([]);
       setDifficulty("Intermediate");
+      setProposeReason("");
 
       setToast("Proposal submitted for review.");
       setTimeout(() => setToast(null), 2200);
@@ -501,6 +504,19 @@ export default function CommitteeHome() {
               </div>
             )}
           </div>
+
+          <label className="grid gap-1 text-sm">
+            <span className="text-[var(--muted)]">
+              Why do you think this competency should be added?
+            </span>
+            <textarea
+              value={proposeReason}
+              onChange={(e) => setProposeReason(e.target.value)}
+              placeholder="Explain the need or justification for this competency…"
+              className="rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 text-sm outline-none min-h-[64px] resize-vertical"
+              rows={3}
+            />
+          </label>
 
           <div className="mt-1 flex justify-end gap-2">
             <button
