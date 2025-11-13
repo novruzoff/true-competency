@@ -31,7 +31,7 @@ type Profile = {
   role: string | null;
 };
 
-const DIFF_ORDER = ["Beginner", "Intermediate", "Advanced", "Expert"] as const;
+const DIFF_ORDER = ["Beginner", "Intermediate", "Expert"] as const;
 
 function cls(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
@@ -42,7 +42,6 @@ function diffVar(d: string): string {
   if (v === "beginner") return "var(--ok)";
   if (v === "intermediate") return "var(--warn)";
   if (v === "expert") return "var(--err)";
-  if (v === "advanced") return "var(--warn)"; // map Advanced ~ warn tier
   return "var(--border)";
 }
 
@@ -53,6 +52,9 @@ export default function CommitteeHome() {
   const [rows, setRows] = useState<Competency[]>([]);
   const [suggested, setSuggested] = useState<SuggestedCompetency[]>([]);
   const [myVotes, setMyVotes] = useState<Record<string, boolean>>({}); // key: stage_id
+  const [voteCounts, setVoteCounts] = useState<
+    Record<string, { forCount: number; againstCount: number }>
+  >({});
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -130,18 +132,37 @@ export default function CommitteeHome() {
         if (sErr) throw sErr;
         if (!cancelled) setSuggested((sug ?? []) as SuggestedCompetency[]);
 
-        // my votes
-        if (u.user?.id) {
-          const { data: votes, error: vErr } = await supabase
-            .from("committee_votes")
-            .select("stage_id, vote")
-            .eq("voter_id", u.user.id);
-          if (vErr) throw vErr;
-          const map: Record<string, boolean> = {};
-          (votes ?? []).forEach((v) => {
-            map[v.stage_id] = v.vote;
-          });
-          if (!cancelled) setMyVotes(map);
+        // committee votes: my votes + aggregate counts
+        const { data: votes, error: vErr } = await supabase
+          .from("committee_votes")
+          .select("stage_id, voter_id, vote");
+        if (vErr) throw vErr;
+
+        const myMap: Record<string, boolean> = {};
+        const countsMap: Record<
+          string,
+          { forCount: number; againstCount: number }
+        > = {};
+
+        (votes ?? []).forEach(
+          (v: { stage_id: string; voter_id: string; vote: boolean }) => {
+            if (!countsMap[v.stage_id]) {
+              countsMap[v.stage_id] = { forCount: 0, againstCount: 0 };
+            }
+            if (v.vote) {
+              countsMap[v.stage_id].forCount += 1;
+            } else {
+              countsMap[v.stage_id].againstCount += 1;
+            }
+            if (v.voter_id === u.user?.id) {
+              myMap[v.stage_id] = v.vote;
+            }
+          }
+        );
+
+        if (!cancelled) {
+          setMyVotes(myMap);
+          setVoteCounts(countsMap);
         }
       } catch (e) {
         if (!cancelled)
@@ -195,9 +216,8 @@ export default function CommitteeHome() {
       const v = d.toLowerCase();
       if (v === "beginner") return 0;
       if (v === "intermediate") return 1;
-      if (v === "advanced") return 2;
-      if (v === "expert") return 3;
-      return 4;
+      if (v === "expert") return 2;
+      return 3;
     };
     return [...filtered].sort((a, b) => {
       const da = order(a.difficulty);
@@ -239,13 +259,43 @@ export default function CommitteeHome() {
   async function handleVote(stageId: string, value: boolean) {
     if (!me?.id) return;
     try {
-      const { error } = await supabase.from("committee_votes").insert({
-        stage_id: stageId,
-        voter_id: me.id,
-        vote: value,
-      });
+      const { error } = await supabase.from("committee_votes").upsert(
+        {
+          stage_id: stageId,
+          voter_id: me.id,
+          vote: value,
+        },
+        { onConflict: "stage_id,voter_id" }
+      );
       if (error) throw error;
+
+      // update my vote
       setMyVotes((prev) => ({ ...prev, [stageId]: value }));
+
+      // update aggregate counts
+      setVoteCounts((prev) => {
+        const existing = prev[stageId] ?? { forCount: 0, againstCount: 0 };
+        const prevVote = myVotes[stageId];
+        let forCount = existing.forCount;
+        let againstCount = existing.againstCount;
+
+        if (prevVote === true) {
+          forCount = Math.max(0, forCount - 1);
+        } else if (prevVote === false) {
+          againstCount = Math.max(0, againstCount - 1);
+        }
+
+        if (value === true) {
+          forCount += 1;
+        } else {
+          againstCount += 1;
+        }
+
+        return {
+          ...prev,
+          [stageId]: { forCount, againstCount },
+        };
+      });
     } catch (e) {
       setErr(
         e instanceof Error
@@ -508,7 +558,7 @@ export default function CommitteeHome() {
                     Vote
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
-                    Proposed
+                    Votes
                   </th>
                 </tr>
               </thead>
@@ -585,9 +635,22 @@ export default function CommitteeHome() {
                         </div>
                       </td>
                       <td className="px-3 py-2 align-middle text-xs text-[var(--muted)] whitespace-nowrap w-32">
-                        {c.created_at
-                          ? new Date(c.created_at).toLocaleDateString()
-                          : "—"}
+                        {(() => {
+                          const counts = voteCounts[c.id] ?? {
+                            forCount: 0,
+                            againstCount: 0,
+                          };
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1 text-[var(--ok)]">
+                                ✓ {counts.forCount}
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[var(--err)]">
+                                ✕ {counts.againstCount}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
