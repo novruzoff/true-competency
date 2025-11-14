@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { useTheme } from "next-themes";
 
 /* ---------------- Types ---------------- */
 type TraineeProfile = {
@@ -55,6 +56,9 @@ const DIFF_ORDER: Record<string, number> = {
 /* ---------------- Page ---------------- */
 export default function InstructorClient() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const tcipLogoSrc =
+    resolvedTheme === "dark" ? "/TCIP_White_Logo.png" : "/TCIP_Black_Logo.png";
 
   /* --- State --- */
   const [loading, setLoading] = useState(true);
@@ -525,6 +529,18 @@ export default function InstructorClient() {
               {greeting ? `Welcome back, ${greeting}` : "Welcome back"}
             </h1>
             <div className="accent-underline mt-3" />
+            <div className="mt-4 flex items-center gap-5">
+              <img
+                src="/APSC_Logo.png"
+                alt="Asian Pacific Society of Cardiology logo"
+                className="h-20 w-auto object-contain"
+              />
+              <img
+                src={tcipLogoSrc}
+                alt="TCIP logo"
+                className="h-20 w-auto object-contain"
+              />
+            </div>
             <p className="mt-2 text-sm md:text-base text-[var(--muted)]">
               Asia Pacific Society of Cardiology TCIP IVUS Course
             </p>

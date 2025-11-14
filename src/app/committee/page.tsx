@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useTheme } from "next-themes";
 
 // TYPES
 type Competency = {
@@ -46,7 +47,10 @@ function diffVar(d: string): string {
 }
 
 export default function CommitteeHome() {
+  const { resolvedTheme } = useTheme();
   const [me, setMe] = useState<Profile | null>(null);
+  const tcipLogoSrc =
+    resolvedTheme === "dark" ? "/TCIP_White_Logo.png" : "/TCIP_Black_Logo.png";
 
   // data
   const [rows, setRows] = useState<Competency[]>([]);
@@ -356,6 +360,18 @@ export default function CommitteeHome() {
               {welcome}
             </h1>
             <div className="accent-underline mt-3" />
+            <div className="mt-4 flex items-center gap-5">
+              <img
+                src="/APSC_Logo.png"
+                alt="Asian Pacific Society of Cardiology logo"
+                className="h-20 w-auto object-contain"
+              />
+              <img
+                src={tcipLogoSrc}
+                alt="TCIP logo"
+                className="h-20 w-auto object-contain"
+              />
+            </div>
             <p className="mt-2 text-sm md:text-base text-[var(--muted)]">
               Asia Pacific Society of Cardiology TCIP IVUS Course
             </p>

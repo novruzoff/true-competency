@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { ChevronAction } from "@/components/ui/ChevronAction";
 import { Building2, MapPin } from "lucide-react";
+import { useTheme } from "next-themes";
 
 /* ---------- types ---------- */
 type Role = "trainee" | "instructor" | "committee" | "student" | "doctor";
@@ -55,6 +56,9 @@ const DIFF_ORDER: Record<string, number> = {
 /* ---------- page ---------- */
 export default function TraineeDashboard() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const tcipLogoSrc =
+    resolvedTheme === "dark" ? "/TCIP_White_Logo.png" : "/TCIP_Black_Logo.png";
 
   // auth/profile
   const [me, setMe] = useState<Profile | null>(null);
@@ -479,6 +483,18 @@ export default function TraineeDashboard() {
               {greetingName ? `Welcome back, ${greetingName}` : "Welcome back"}
             </h1>
             <div className="accent-underline mt-3" />
+            <div className="mt-4 flex items-center gap-5">
+              <img
+                src="/APSC_Logo.png"
+                alt="Asian Pacific Society of Cardiology logo"
+                className="h-20 w-auto object-contain"
+              />
+              <img
+                src={tcipLogoSrc}
+                alt="TCIP logo"
+                className="h-20 w-auto object-contain"
+              />
+            </div>
             <p className="mt-2 text-sm md:text-base text-[var(--muted)]">
               Asia Pacific Society of Cardiology TCIP IVUS Course
             </p>
