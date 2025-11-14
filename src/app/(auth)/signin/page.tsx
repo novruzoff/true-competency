@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { ensureProfile } from "@/lib/ensureProfile";
 import CountrySelect from "@/components/CountrySelect"; // value: string | null; onChange: (code: string) => void
+import { useTheme } from "next-themes";
 
 type Role = "trainee" | "instructor" | "committee";
 
@@ -200,6 +201,9 @@ const ROLE_INFO: Record<Role, { title: string; points: string[] }> = {
 export default function SignInPage() {
   const router = useRouter();
   const [redirect, setRedirect] = useState<string>("/");
+  const { resolvedTheme } = useTheme();
+  const tcipLogoSrc =
+    resolvedTheme === "dark" ? "/TCIP_White_Logo.png" : "/TCIP_Black_Logo.png";
 
   useEffect(() => {
     try {
@@ -465,6 +469,22 @@ export default function SignInPage() {
                     structured evaluations, evidence collection, and transparent
                     progress tracking for trainees, instructors, and committees.
                   </p>
+                  <div className="mt-6 flex items-center gap-8 flex-wrap">
+                    <Image
+                      src="/APSC_Logo.png"
+                      alt="Asian Pacific Society of Cardiology"
+                      width={190}
+                      height={190}
+                      className="h-24 w-auto object-contain drop-shadow-[0_16px_32px_rgba(0,0,0,0.16)]"
+                    />
+                    <Image
+                      src={tcipLogoSrc}
+                      alt="TCIP Program"
+                      width={190}
+                      height={190}
+                      className="h-24 w-auto object-contain drop-shadow-[0_16px_32px_rgba(0,0,0,0.16)]"
+                    />
+                  </div>
                 </>
               )}
             </div>
