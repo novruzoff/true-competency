@@ -75,9 +75,6 @@ export default function TraineeDashboard() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [searchQ, setSearchQ] = useState("");
 
-  // widgets
-  const [streakDays, setStreakDays] = useState(0);
-
   // enroll modal state + filters
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const [diffFilterEnroll, setDiffFilterEnroll] = useState<
@@ -167,37 +164,6 @@ export default function TraineeDashboard() {
         const pMap = new Map<string, ProgressRow>();
         (progress ?? []).forEach((r) => pMap.set(r.competency_id, r));
         setProgressByComp(pMap);
-
-        // streak — last 30 days with answers
-        const { data: recent, error: ansErr } = await supabase
-          .from("student_answers")
-          .select("answered_at")
-          .eq("student_id", prof.id)
-          .gte(
-            "answered_at",
-            new Date(Date.now() - 31 * 86400000).toISOString()
-          )
-          .order("answered_at", { ascending: false })
-          .limit(200);
-        if (ansErr) {
-          setStreakDays(0);
-        } else {
-          const days = new Set(
-            (recent ?? []).map((r: { answered_at: string }) =>
-              new Date(r.answered_at).toISOString().slice(0, 10)
-            )
-          );
-          let streak = 0;
-          const today = new Date();
-          for (let i = 0; i < 31; i++) {
-            const d = new Date(today);
-            d.setDate(today.getDate() - i);
-            const key = d.toISOString().slice(0, 10);
-            if (days.has(key)) streak += 1;
-            else break;
-          }
-          setStreakDays(streak);
-        }
       } catch (e) {
         setErr(e instanceof Error ? e.message : String(e));
       } finally {
@@ -545,11 +511,6 @@ export default function TraineeDashboard() {
                   ).length
                 )}
                 color="var(--ok)"
-              />
-              <StatText
-                label="Day Streak"
-                value={formatNumber(streakDays)}
-                color="var(--warn)"
               />
             </div>
           </div>

@@ -73,6 +73,47 @@ export default function InstructorTraineeDetailPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [approving, setApproving] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [bulkApproving, setBulkApproving] = useState(false);
+  async function approveAll() {
+    if (!traineeId) return;
+
+    const pendingIds = items
+      .filter((it) => (it.pct ?? 0) < 100)
+      .map((it) => it.competency.id);
+
+    if (pendingIds.length === 0) return;
+
+    setBulkApproving(true);
+    setErr(null);
+
+    try {
+      // Call RPC for each competency
+      for (const compId of pendingIds) {
+        const { error } = await supabase.rpc(
+          "instructor_mark_competency_complete",
+          {
+            p_student_id: traineeId,
+            p_competency_id: compId,
+          }
+        );
+        if (error) {
+          throw new Error(error.message);
+        }
+      }
+
+      // Refresh from the view so pct reflects overrides
+      await load();
+
+      setToast("All competencies approved.");
+      setTimeout(() => setToast(null), 2000);
+    } catch (e) {
+      setErr(
+        `Could not approve all competencies. ${messageFrom(e, "")}`.trim()
+      );
+    } finally {
+      setBulkApproving(false);
+    }
+  }
 
   async function load() {
     try {
@@ -240,12 +281,31 @@ export default function InstructorTraineeDetailPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => router.push("/instructor")}
-            className="rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 text-sm hover:shadow-sm"
-          >
-            ← Back
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push("/instructor")}
+              className="rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 text-sm hover:shadow-sm"
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              onClick={approveAll}
+              disabled={
+                loading ||
+                bulkApproving ||
+                items.length === 0 ||
+                !items.some((it) => (it.pct ?? 0) < 100)
+              }
+              className={[
+                "rounded-xl px-3 py-2 text-sm font-medium border transition",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "border-emerald-700 bg-emerald-600/90 text-white hover:bg-emerald-600",
+              ].join(" ")}
+            >
+              {bulkApproving ? "Approving all…" : "Approve all"}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -287,7 +347,7 @@ export default function InstructorTraineeDetailPage() {
               return (
                 <article
                   key={c.id}
-                  className="relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
+                  className="relative flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 h-full"
                 >
                   {/* Top-right actions */}
                   <div className="absolute right-3 top-3 flex items-center gap-2">
@@ -343,7 +403,7 @@ export default function InstructorTraineeDetailPage() {
                     </div>
                   )}
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="mt-auto pt-3 flex items-center justify-between gap-3">
                     {/* progress */}
                     <div className="min-w-0">
                       <div className="text-xs text-[var(--muted)]">
