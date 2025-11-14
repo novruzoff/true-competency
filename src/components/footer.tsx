@@ -17,11 +17,6 @@ export default function Footer() {
             Contact
           </a>
         </div>
-        <img
-          src="/APSC_Logo.png"
-          alt="Asian Pacific Society of Cardiology logo"
-          className="h-12 object-contain"
-        />
       </div>
     </footer>
   );
