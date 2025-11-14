@@ -491,7 +491,7 @@ export default function TraineeDashboard() {
                   }}
                   title="Enroll in a competency"
                 >
-                  + Test
+                  + Enroll
                 </button>
               </div>
             </div>
@@ -649,7 +649,7 @@ export default function TraineeDashboard() {
                       }}
                       title="Enroll in all Beginner competencies"
                     >
-                      Test all Beginner
+                      Enroll in all Beginner
                     </button>
                     <button
                       type="button"
@@ -663,7 +663,7 @@ export default function TraineeDashboard() {
                       }}
                       title="Enroll in all Intermediate competencies"
                     >
-                      Test all Intermediate
+                      Enroll in all Intermediate
                     </button>
                     <button
                       type="button"
@@ -677,7 +677,7 @@ export default function TraineeDashboard() {
                       }}
                       title="Enroll in all Expert competencies"
                     >
-                      Test all Expert
+                      Enroll in all Expert
                     </button>
                     <button
                       type="button"
@@ -690,7 +690,7 @@ export default function TraineeDashboard() {
                       }}
                       title="Enroll in all available competencies"
                     >
-                      Test all Available
+                      Enroll in all Available
                     </button>
                   </div>
                 </div>
@@ -747,7 +747,7 @@ export default function TraineeDashboard() {
                           }}
                           title="Enroll"
                         >
-                          + Test
+                          + Enroll
                         </button>
                       </div>
                       <div className="min-w-0 pr-24 md:pr-28">
