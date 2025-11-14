@@ -17,6 +17,9 @@ type Profile = {
   last_name: string | null;
   full_name?: string | null;
   email?: string | null;
+  university?: string | null;
+  hospital?: string | null;
+  country_name?: string | null;
 };
 
 type Competency = {
@@ -107,7 +110,9 @@ export default function TraineeDashboard() {
         // profile (for greeting + id)
         const { data: prof, error: profErr } = await supabase
           .from("profiles")
-          .select("id, role, first_name, last_name, full_name, email")
+          .select(
+            "id, role, first_name, last_name, full_name, email, university, hospital, country_name"
+          )
           .eq("id", uid)
           .single<Profile>();
         if (profErr) throw profErr;
@@ -461,11 +466,11 @@ export default function TraineeDashboard() {
                   <div className="mt-1 flex items-center gap-4 text-xs md:text-sm text-[var(--muted)]">
                     <span className="inline-flex items-center gap-1.5">
                       <Building2 className="h-3.5 w-3.5" aria-hidden />
-                      McGill University
+                      {me?.university || me?.hospital || "—"}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
                       <MapPin className="h-3.5 w-3.5" aria-hidden />
-                      Canada
+                      {me?.country_name || "—"}
                     </span>
                   </div>
                 </div>
