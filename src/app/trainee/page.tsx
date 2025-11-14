@@ -922,8 +922,9 @@ export default function TraineeDashboard() {
                   style={{ background: topStripe(diffRaw) }}
                   aria-hidden
                 />
-                <div className="flex items-start gap-2">
-                  <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+                <div className="flex items-start gap-2 h-full">
+                  {/* Top-right: difficulty pill */}
+                  <div className="absolute top-4 right-4 z-10">
                     {diffRaw && (
                       <span
                         className="text-[10px] font-semibold rounded-full px-2 py-0.5"
@@ -932,15 +933,10 @@ export default function TraineeDashboard() {
                         {diffRaw}
                       </span>
                     )}
-                    {hasQuestions && (
-                      <ChevronAction
-                        href={`/trainee/competency/${c.id}`}
-                        variant="accent"
-                        title="Open"
-                      />
-                    )}
                   </div>
-                  <div className="min-w-0 flex-1 pr-24 md:pr-32">
+
+                  {/* Main content */}
+                  <div className="min-w-0 flex-1 pr-24 md:pr-32 pb-8">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold leading-snug break-words">
                         {title}
@@ -955,6 +951,17 @@ export default function TraineeDashboard() {
                       </div>
                     )}
                   </div>
+
+                  {/* Bottom-right: chevron to open questions */}
+                  {hasQuestions && (
+                    <div className="absolute bottom-4 right-4 z-10">
+                      <ChevronAction
+                        href={`/trainee/competency/${c.id}`}
+                        variant="accent"
+                        title="Open"
+                      />
+                    </div>
+                  )}
                 </div>
               </article>
             );
