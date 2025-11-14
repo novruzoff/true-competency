@@ -322,11 +322,71 @@ export default function TraineeDashboard() {
   );
 
   // split enrolled into in-progress vs completed (>= 100%)
-  const completedList: Competency[] = useMemo<Competency[]>(() => [], []);
-  const inProgressList: Competency[] = useMemo(
-    () => enrolledList,
-    [enrolledList]
+  const completedList: Competency[] = useMemo(
+    () =>
+      enrolledList.filter((c) => (progressByComp.get(c.id)?.pct ?? 0) >= 100),
+    [enrolledList, progressByComp]
   );
+
+  const inProgressList: Competency[] = useMemo(
+    () =>
+      enrolledList.filter((c) => (progressByComp.get(c.id)?.pct ?? 0) < 100),
+    [enrolledList, progressByComp]
+  );
+
+  const completionStats = useMemo(() => {
+    const enrolledTotal = enrolledList.length;
+
+    const enrolledByDiff: Record<string, number> = {
+      beginner: 0,
+      intermediate: 0,
+      expert: 0,
+      other: 0,
+    };
+
+    const completedByDiff: Record<string, number> = {
+      beginner: 0,
+      intermediate: 0,
+      expert: 0,
+      other: 0,
+    };
+
+    let completedTotal = 0;
+
+    for (const c of enrolledList) {
+      const raw = (c.difficulty ?? "").toLowerCase();
+      const bucket =
+        raw === "beginner" || raw === "intermediate" || raw === "expert"
+          ? raw
+          : "other";
+
+      enrolledByDiff[bucket]++;
+
+      const pct = Math.max(
+        0,
+        Math.min(100, Math.round(progressByComp.get(c.id)?.pct ?? 0))
+      );
+      if (pct >= 100) {
+        completedTotal++;
+        completedByDiff[bucket]++;
+      }
+    }
+
+    const pctSafe = (done: number, total: number) => {
+      if (!total) return 0;
+      return Math.round((done / total) * 100);
+    };
+
+    return {
+      overallPct: pctSafe(completedTotal, enrolledTotal),
+      beginnerPct: pctSafe(completedByDiff.beginner, enrolledByDiff.beginner),
+      intermediatePct: pctSafe(
+        completedByDiff.intermediate,
+        enrolledByDiff.intermediate
+      ),
+      expertPct: pctSafe(completedByDiff.expert, enrolledByDiff.expert),
+    };
+  }, [enrolledList, progressByComp]);
 
   // modal-filtered available list
   const availableForModal = useMemo(() => {
@@ -496,22 +556,50 @@ export default function TraineeDashboard() {
               </div>
             </div>
 
-            {/* Top Stats Row (text only) */}
-            <div className="mt-4 flex flex-wrap items-baseline gap-8">
-              <StatText
-                label="Enrolled"
-                value={formatNumber(enrolledList.length)}
-                color="var(--accent)"
-              />
-              <StatText
-                label="Completed"
-                value={formatNumber(
-                  enrolledList.filter(
-                    (c) => (progressByComp.get(c.id)?.pct ?? 0) >= 100
-                  ).length
-                )}
-                color="var(--ok)"
-              />
+            {/* Top Stats Row + completion breakdown */}
+            <div className="mt-4 flex flex-col md:flex-row gap-6 md:items-center">
+              <div className="flex items-center gap-8">
+                <StatText
+                  label="Enrolled"
+                  value={formatNumber(enrolledList.length)}
+                  color="var(--accent)"
+                />
+                <StatText
+                  label="Completed"
+                  value={formatNumber(
+                    enrolledList.filter(
+                      (c) => (progressByComp.get(c.id)?.pct ?? 0) >= 100
+                    ).length
+                  )}
+                  color="var(--ok)"
+                />
+              </div>
+
+              <div className="hidden md:block h-12 w-px self-center bg-[var(--border)]" />
+
+              {/* Compact side-by-side progress bars */}
+              <div className="flex-1 flex flex-wrap gap-3 md:justify-end">
+                <ProgressStatRow
+                  label="Overall"
+                  pct={completionStats.overallPct}
+                  color="var(--accent)"
+                />
+                <ProgressStatRow
+                  label="Beginner"
+                  pct={completionStats.beginnerPct}
+                  color="var(--ok)"
+                />
+                <ProgressStatRow
+                  label="Intermediate"
+                  pct={completionStats.intermediatePct}
+                  color="var(--warn)"
+                />
+                <ProgressStatRow
+                  label="Expert"
+                  pct={completionStats.expertPct}
+                  color="var(--err)"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1090,18 +1178,36 @@ function CardSub({
   );
 }
 
-function ProgressBar({ pct }: { pct: number }) {
+function ProgressBar({ pct, color }: { pct: number; color?: string }) {
+  const barColor = color ?? "var(--accent)";
   return (
     <div className="h-2 w-full overflow-hidden rounded-full border border-[var(--border)] bg-[var(--field)]">
       <div
         className="h-full"
         style={{
           width: `${pct}%`,
-          background: "var(--accent)",
-          boxShadow:
-            "0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent) inset",
+          background: barColor,
+          boxShadow: `0 0 0 1px color-mix(in oklab, ${barColor} 20%, transparent) inset`,
         }}
       />
+    </div>
+  );
+}
+
+function ProgressStatRow({
+  label,
+  pct,
+  color,
+}: {
+  label: string;
+  pct: number;
+  color: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 w-28">
+      <span className="text-[10px] text-[var(--muted)] truncate">{label}</span>
+      <ProgressBar pct={pct} color={color} />
+      <span className="text-[10px] text-right font-medium">{pct}%</span>
     </div>
   );
 }
