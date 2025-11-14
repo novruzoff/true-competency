@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { ChevronAction } from "@/components/ui/ChevronAction";
 import { Building2, MapPin } from "lucide-react";
 import { useTheme } from "next-themes";
+import ReactCountryFlag from "react-country-flag";
 
 /* ---------- types ---------- */
 type Role = "trainee" | "instructor" | "committee" | "student" | "doctor";
@@ -46,12 +47,47 @@ type Assignment = {
   assigned_at?: string;
 };
 
+type LeaderboardProgressRow = {
+  student_id: string | null;
+  competency_id: string | null;
+  pct: number;
+  profiles: {
+    full_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    country_name: string | null;
+    country_code: string | null;
+    role: Role | null;
+  } | null;
+};
+
+type CountryLeaderboardEntry = {
+  country: string;
+  code: string | null;
+  completed: number;
+};
+
+type TraineeLeaderboardEntry = {
+  id: string;
+  name: string;
+  country: string | null;
+  code: string | null;
+  completed: number;
+};
+
+type TagLeaderboardEntry = {
+  tag: string;
+  completed: number;
+};
+
 /* ---------- constants ---------- */
 const DIFF_ORDER: Record<string, number> = {
   beginner: 0,
   intermediate: 1,
   expert: 2,
 };
+
+const NOT_SPECIFIED_COUNTRY_LABEL = "Not specified";
 
 /* ---------- page ---------- */
 export default function TraineeDashboard() {
@@ -70,6 +106,15 @@ export default function TraineeDashboard() {
   const [progressByComp, setProgressByComp] = useState<
     Map<string, ProgressRow>
   >(new Map());
+  const [countryLeaderboard, setCountryLeaderboard] = useState<
+    CountryLeaderboardEntry[]
+  >([]);
+  const [traineeLeaderboard, setTraineeLeaderboard] = useState<
+    TraineeLeaderboardEntry[]
+  >([]);
+  const [tagLeaderboard, setTagLeaderboard] = useState<TagLeaderboardEntry[]>(
+    []
+  );
 
   // ui
   const [loading, setLoading] = useState(true);
@@ -146,6 +191,13 @@ export default function TraineeDashboard() {
           return an.localeCompare(bn);
         });
         setAllComps(sorted);
+        const compTagLookup = new Map<string, string[]>();
+        sorted.forEach((c) => {
+          compTagLookup.set(
+            c.id,
+            (c.tags ?? []).map((t) => t.trim()).filter(Boolean)
+          );
+        });
 
         // my assignments (enrolled competencies)
         const { data: assigns, error: aErr } = await supabase
@@ -173,6 +225,129 @@ export default function TraineeDashboard() {
         const pMap = new Map<string, ProgressRow>();
         (progress ?? []).forEach((r) => pMap.set(r.competency_id, r));
         setProgressByComp(pMap);
+
+        // global leaderboards
+        const { data: leaderboardRows, error: leaderboardErr } = await supabase
+          .from("student_competency_progress")
+          .select(
+            "student_id, competency_id, pct, profiles!inner(full_name, first_name, last_name, country_name, country_code, role)"
+          )
+          .gte("pct", 100)
+          .eq("profiles.role", "trainee")
+          .returns<LeaderboardProgressRow[]>();
+        if (leaderboardErr) throw leaderboardErr;
+
+        const countryMap = new Map<
+          string,
+          { name: string; code: string | null; count: number }
+        >();
+        const traineeMap = new Map<
+          string,
+          {
+            id: string;
+            name: string;
+            country: string | null;
+            code: string | null;
+            count: number;
+          }
+        >();
+        const tagMap = new Map<string, { label: string; count: number }>();
+
+        (leaderboardRows ?? []).forEach((row) => {
+          const profile = row.profiles;
+          if (!profile) return;
+          const rawCountry = (profile.country_name ?? "").trim();
+          const hasCountryName = rawCountry.length > 0;
+          const countryName = hasCountryName
+            ? rawCountry
+            : NOT_SPECIFIED_COUNTRY_LABEL;
+          const countryKey = hasCountryName
+            ? rawCountry.toLowerCase()
+            : NOT_SPECIFIED_COUNTRY_LABEL.toLowerCase();
+          const code =
+            hasCountryName && profile.country_code
+              ? profile.country_code.slice(0, 2).toUpperCase()
+              : null;
+
+          const cEntry = countryMap.get(countryKey);
+          if (cEntry) cEntry.count += 1;
+          else
+            countryMap.set(countryKey, { name: countryName, code, count: 1 });
+
+          const studentId = row.student_id;
+          if (studentId) {
+            const displayName =
+              (
+                profile.full_name ||
+                `${profile.first_name ?? ""} ${profile.last_name ?? ""}` ||
+                ""
+              ).trim() || "Trainee";
+            const tEntry = traineeMap.get(studentId);
+            if (tEntry) tEntry.count += 1;
+            else
+              traineeMap.set(studentId, {
+                id: studentId,
+                name: displayName,
+                country: hasCountryName ? profile.country_name : null,
+                code,
+                count: 1,
+              });
+          }
+
+          const compId = row.competency_id;
+          if (compId) {
+            const tags = compTagLookup.get(compId) ?? [];
+            tags.forEach((tag) => {
+              const clean = tag.trim();
+              if (!clean) return;
+              const key = clean.toLowerCase();
+              const label = clean.startsWith("#") ? clean : `#${clean}`;
+              const existing = tagMap.get(key);
+              if (existing) existing.count += 1;
+              else tagMap.set(key, { label, count: 1 });
+            });
+          }
+        });
+
+        const countryLeaderboardList = Array.from(countryMap.values())
+          .sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            return a.name.localeCompare(b.name);
+          })
+          .slice(0, 5)
+          .map((entry) => ({
+            country: entry.name,
+            code: entry.code,
+            completed: entry.count,
+          }));
+        setCountryLeaderboard(countryLeaderboardList);
+
+        const traineeLeaderboardList = Array.from(traineeMap.values())
+          .sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            return a.name.localeCompare(b.name);
+          })
+          .slice(0, 5)
+          .map((entry) => ({
+            id: entry.id,
+            name: entry.name,
+            country: entry.country,
+            code: entry.code,
+            completed: entry.count,
+          }));
+        setTraineeLeaderboard(traineeLeaderboardList);
+
+        const tagLeaderboardList = Array.from(tagMap.values())
+          .sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            return a.label.localeCompare(b.label);
+          })
+          .slice(0, 5)
+          .map((entry) => ({
+            tag: entry.label,
+            completed: entry.count,
+          }));
+        setTagLeaderboard(tagLeaderboardList);
       } catch (e) {
         setErr(e instanceof Error ? e.message : String(e));
       } finally {
@@ -886,6 +1061,21 @@ export default function TraineeDashboard() {
         </div>
       )}
 
+      {/* Leaderboards */}
+      <section className="mx-auto max-w-6xl px-6 pb-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <CountryLeaderboardCard
+            entries={countryLeaderboard}
+            loading={loading}
+          />
+          <TraineeLeaderboardCard
+            entries={traineeLeaderboard}
+            loading={loading}
+          />
+          <TagLeaderboardCard entries={tagLeaderboard} loading={loading} />
+        </div>
+      </section>
+
       {/* Notices */}
       <section className="mx-auto max-w-6xl px-6">
         {err && (
@@ -1178,6 +1368,206 @@ export default function TraineeDashboard() {
 /* ---------- charts ---------- */
 
 /* ---------- tiny presentational helpers ---------- */
+
+function CountryLeaderboardCard({
+  entries,
+  loading,
+}: {
+  entries: CountryLeaderboardEntry[];
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+            Country Leaderboard
+          </div>
+          <div className="text-base font-semibold">
+            Most completed competencies
+          </div>
+        </div>
+      </div>
+
+      {loading && entries.length === 0 ? (
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="h-10 rounded-xl bg-[var(--field)] border border-[var(--border)] animate-pulse"
+            />
+          ))}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="mt-4 text-xs text-[var(--muted)]">
+          No completed competencies recorded yet.
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {entries.map((entry, idx) => (
+            <li
+              key={`${entry.country}-${entry.code ?? "unknown"}`}
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-5 text-sm font-semibold text-[var(--muted)]">
+                  {idx + 1}
+                </span>
+                <CountryFlagIcon code={entry.code} label={entry.country} />
+                <span className="font-medium truncate">{entry.country}</span>
+              </div>
+              <div className="text-left text-sm font-semibold">
+                {entry.completed}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TraineeLeaderboardCard({
+  entries,
+  loading,
+}: {
+  entries: TraineeLeaderboardEntry[];
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+        Top Trainees
+      </div>
+      <div className="text-base font-semibold">Most completed competencies</div>
+
+      {loading && entries.length === 0 ? (
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="h-12 rounded-xl bg-[var(--field)] border border-[var(--border)] animate-pulse"
+            />
+          ))}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="mt-4 text-xs text-[var(--muted)]">
+          No trainee completions recorded yet.
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-4">
+          {entries.map((entry, idx) => (
+            <li
+              key={entry.id}
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-5 text-sm font-semibold text-[var(--muted)]">
+                  {idx + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{entry.name}</div>
+                </div>
+              </div>
+              <div className="text-left text-sm font-semibold">
+                {entry.completed}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TagLeaderboardCard({
+  entries,
+  loading,
+}: {
+  entries: TagLeaderboardEntry[];
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+        Hot Tags
+      </div>
+      <div className="text-base font-semibold">Most completed by tags</div>
+
+      {loading && entries.length === 0 ? (
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="h-10 rounded-xl bg-[var(--field)] border border-[var(--border)] animate-pulse"
+            />
+          ))}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="mt-4 text-xs text-[var(--muted)]">
+          No completed competencies in the dataset yet.
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {entries.map((entry, idx) => (
+            <li
+              key={entry.tag}
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-5 text-sm font-semibold text-[var(--muted)]">
+                  {idx + 1}
+                </span>
+                <span className="font-medium truncate">{entry.tag}</span>
+              </div>
+              <div className="text-left text-sm font-semibold">
+                {entry.completed}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function CountryFlagIcon({
+  code,
+  label,
+}: {
+  code: string | null;
+  label: string;
+}) {
+  const isNotSpecified =
+    label.trim().toLowerCase() === NOT_SPECIFIED_COUNTRY_LABEL.toLowerCase();
+  if (code && code.length === 2) {
+    return (
+      <ReactCountryFlag
+        svg
+        countryCode={code}
+        style={{
+          width: "1.75rem",
+          height: "1.25rem",
+          borderRadius: "6px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+        }}
+        aria-label={label}
+        title={label}
+      />
+    );
+  }
+
+  return (
+    <span
+      className="flex h-5 w-7 items-center justify-center rounded border border-[var(--border)] text-[10px] text-[var(--muted)]"
+      aria-label={label}
+      title={label}
+    >
+      {isNotSpecified ? "NS" : "??"}
+    </span>
+  );
+}
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
