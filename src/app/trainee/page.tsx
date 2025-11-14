@@ -324,13 +324,19 @@ export default function TraineeDashboard() {
   // split enrolled into in-progress vs completed (>= 100%)
   const completedList: Competency[] = useMemo(
     () =>
-      enrolledList.filter((c) => (progressByComp.get(c.id)?.pct ?? 0) >= 100),
+      enrolledList.filter((c) => {
+        const pct = progressByComp.get(c.id)?.pct ?? 0;
+        return pct >= 100; // auto-completed when backend pct is 100
+      }),
     [enrolledList, progressByComp]
   );
 
   const inProgressList: Competency[] = useMemo(
     () =>
-      enrolledList.filter((c) => (progressByComp.get(c.id)?.pct ?? 0) < 100),
+      enrolledList.filter((c) => {
+        const pct = progressByComp.get(c.id)?.pct ?? 0;
+        return pct < 100; // still in progress if backend pct < 100
+      }),
     [enrolledList, progressByComp]
   );
 

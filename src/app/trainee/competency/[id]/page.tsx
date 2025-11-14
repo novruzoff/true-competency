@@ -78,7 +78,7 @@ export default function TraineeCompetencyPage() {
   // progress
   const total = questions.length;
   const answeredCount = useMemo(
-    () => Object.values(answers).filter(Boolean).length,
+    () => Object.values(answers).filter((a) => a?.is_correct === true).length,
     [answers]
   );
   const pct = total ? Math.round((answeredCount / total) * 100) : 0;
