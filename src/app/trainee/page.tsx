@@ -1048,13 +1048,17 @@ export default function TraineeDashboard() {
 
                   {/* Bottom-right: chevron to open questions */}
                   {hasQuestions && (
-                    <div className="absolute bottom-4 right-4 z-10">
-                      <ChevronAction
-                        href={`/trainee/competency/${c.id}`}
-                        variant="accent"
-                        title="Open"
-                      />
-                    </div>
+                    <a
+                      href={`/trainee/competency/${c.id}`}
+                      className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-2 rounded-xl border-2 px-3 py-2 text-xs font-medium transition transform hover:scale-[1.04] active:scale-[0.98]"
+                      style={{
+                        background: "var(--accent)",
+                        color: "#fff",
+                        borderColor: "var(--accent)",
+                      }}
+                    >
+                      <span>Test</span>
+                    </a>
                   )}
                 </div>
               </article>
