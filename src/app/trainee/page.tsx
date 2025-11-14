@@ -317,15 +317,10 @@ export default function TraineeDashboard() {
   );
 
   // split enrolled into in-progress vs completed (>= 100%)
-  const completedList = useMemo(
-    () =>
-      enrolledList.filter((c) => (progressByComp.get(c.id)?.pct ?? 0) >= 100),
-    [enrolledList, progressByComp]
-  );
-  const inProgressList = useMemo(
-    () =>
-      enrolledList.filter((c) => (progressByComp.get(c.id)?.pct ?? 0) < 100),
-    [enrolledList, progressByComp]
+  const completedList: Competency[] = useMemo<Competency[]>(() => [], []);
+  const inProgressList: Competency[] = useMemo(
+    () => enrolledList,
+    [enrolledList]
   );
 
   // modal-filtered available list
@@ -945,7 +940,7 @@ export default function TraineeDashboard() {
 
                     {!!c.tags?.length && (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {c.tags!.slice(0, 6).map((t) => (
+                        {c.tags!.slice(0, 6).map((t: string) => (
                           <Tag key={t}>{t}</Tag>
                         ))}
                       </div>
