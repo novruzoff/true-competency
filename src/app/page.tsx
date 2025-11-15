@@ -311,15 +311,15 @@ const SAMPLE_COMPETENCIES = [
 ];
 
 const SAMPLE_COUNTRIES = [
-  { flag: "🇸🇬", label: "Singapore", cases: 128 },
-  { flag: "🇵🇭", label: "Philippines", cases: 96 },
-  { flag: "🇮🇳", label: "India", cases: 88 },
+  { flag: "🇨🇦", label: "Canada", cases: 38 },
+  { flag: "🇭🇰", label: "Hong Kong", cases: 26 },
+  { flag: "🇦🇿", label: "Azerbaijan", cases: 19 },
 ];
 
 const SAMPLE_TAGS = [
-  { tag: "#IVUS", cases: 214 },
-  { tag: "#CalcifiedLesions", cases: 172 },
-  { tag: "#LeftMain", cases: 138 },
+  { tag: "#IVUS", cases: 114 },
+  { tag: "#Calcium", cases: 32 },
+  { tag: "#Pathophysiology", cases: 15 },
 ];
 
 function ProgressPreviewSection() {
