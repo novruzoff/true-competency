@@ -18,6 +18,14 @@ type HeroCta = {
   disabled?: boolean;
 };
 
+const diffTone = (level: string) => {
+  const key = level.toLowerCase();
+  if (key === "beginner") return "var(--ok)";
+  if (key === "intermediate") return "var(--warn)";
+  if (key === "expert") return "var(--err)";
+  return "var(--accent)";
+};
+
 export default function RootPage() {
   const [checking, setChecking] = useState(true);
   const [dashUrl, setDashUrl] = useState<string | null>(null);
@@ -299,14 +307,12 @@ const SAMPLE_COMPETENCIES = [
     diff: "Beginner",
     tags: ["IVUS", "Imaging"],
     progress: 72,
-    status: "In progress",
   },
   {
     title: "Complex Coronary Physiology",
     diff: "Intermediate",
     tags: ["Coronary", "Hemodynamics"],
     progress: 45,
-    status: "Active",
   },
 ];
 
@@ -481,17 +487,20 @@ function ExampleCompetencyShowcase({
                 key={comp.title}
                 className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
-                      {comp.diff}
-                    </p>
-                    <h3 className="text-sm font-semibold">{comp.title}</h3>
-                  </div>
-                  <span className="text-xs font-semibold text-[var(--accent)]">
-                    {comp.status}
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
+                    Competency
+                  </p>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white"
+                    style={{ background: diffTone(comp.diff) }}
+                  >
+                    {comp.diff}
                   </span>
                 </div>
+                <h3 className="mt-1 text-base font-semibold leading-tight">
+                  {comp.title}
+                </h3>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {comp.tags.map((tag) => (
                     <span
