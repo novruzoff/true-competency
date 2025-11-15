@@ -776,7 +776,7 @@ export default function CommitteeHome() {
                 <textarea
                   value={proposeReason}
                   onChange={(e) => setProposeReason(e.target.value)}
-                  placeholder="Explain the need or justification for this competency…"
+                  placeholder="You can also suggest new tags if existing ones do not cover the competency well."
                   className="rounded-xl border border-[var(--border)] bg-[var(--field)] px-3 py-2 text-sm outline-none min-h-[64px] resize-vertical"
                   rows={3}
                 />
