@@ -357,7 +357,7 @@ export default function InstructorClient() {
         if (!cancelled) {
           setCompetencies(sorted);
         }
-      } catch (e) {
+      } catch {
         // No longer using compsErr/compsLoading for browse modal
       } finally {
         // No longer using compsErr/compsLoading for browse modal
@@ -530,11 +530,13 @@ export default function InstructorClient() {
             </h1>
             <div className="accent-underline mt-3" />
             <div className="mt-4 flex items-center gap-5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/APSC_Logo.png"
                 alt="Asian Pacific Society of Cardiology logo"
                 className="h-20 w-auto object-contain"
               />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={tcipLogoSrc}
                 alt="TCIP logo"

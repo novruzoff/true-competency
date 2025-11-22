@@ -216,6 +216,7 @@ export default function InstructorTraineeDetailPage() {
     return () => {
       isMounted.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traineeId]);
 
   async function approve(compId: string) {

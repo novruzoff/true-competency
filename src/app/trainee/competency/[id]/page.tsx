@@ -179,7 +179,7 @@ export default function TraineeCompetencyPage() {
     return () => {
       cancelled = true;
     };
-  }, [competencyId, router, supabase]);
+  }, [competencyId, router]);
 
   /* -------------------- Handlers -------------------- */
   async function submitMCQ(qid: string) {

@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { ChevronAction } from "@/components/ui/ChevronAction";
 import { Building2, MapPin } from "lucide-react";
 import { useTheme } from "next-themes";
 import ReactCountryFlag from "react-country-flag";
@@ -659,11 +658,13 @@ export default function TraineeDashboard() {
             </h1>
             <div className="accent-underline mt-3" />
             <div className="mt-4 flex items-center gap-5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/APSC_Logo.png"
                 alt="Asian Pacific Society of Cardiology logo"
                 className="h-20 w-auto object-contain"
               />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={tcipLogoSrc}
                 alt="TCIP logo"
@@ -1022,13 +1023,12 @@ export default function TraineeDashboard() {
                             borderColor: "var(--accent)",
                           }}
                           onMouseEnter={(e) => {
-                            (e.currentTarget.style.background =
-                              "var(--accent)"),
-                              (e.currentTarget.style.color = "#fff");
+                            e.currentTarget.style.background = "var(--accent)";
+                            e.currentTarget.style.color = "#fff";
                           }}
                           onMouseLeave={(e) => {
-                            (e.currentTarget.style.background = "#fff"),
-                              (e.currentTarget.style.color = "var(--accent)");
+                            e.currentTarget.style.background = "#fff";
+                            e.currentTarget.style.color = "var(--accent)";
                           }}
                           title="Enroll"
                         >
@@ -1207,7 +1207,6 @@ export default function TraineeDashboard() {
             const title = c.name ?? `Topic ${c.id.slice(0, 8)}…`;
             const diffRaw = (c.difficulty ?? "").trim();
             const p = progressByComp.get(c.id);
-            const pct = Math.max(0, Math.min(100, Math.round(p?.pct ?? 0)));
             const hasQuestions =
               (p?.total_questions ?? 0) > 0 ||
               !!(c.test_question && c.test_question.trim().length);
@@ -1569,31 +1568,6 @@ function CountryFlagIcon({
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-      {children}
-    </div>
-  );
-}
-function CardTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-sm text-[var(--muted)]">{children}</div>;
-}
-function CardValue({ children }: { children: React.ReactNode }) {
-  return <div className="mt-1 text-3xl font-semibold">{children}</div>;
-}
-function CardSub({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`text-xs text-[var(--muted)] ${className}`}>{children}</div>
-  );
-}
-
 function ProgressBar({ pct, color }: { pct: number; color?: string }) {
   const barColor = color ?? "var(--accent)";
   return (
@@ -1628,10 +1602,6 @@ function ProgressStatRow({
   );
 }
 
-function s(n: number) {
-  return n === 1 ? "" : "s";
-}
-
 function getInitials(text: string) {
   const str = (text || "").trim();
   if (!str) return "U";
@@ -1647,36 +1617,6 @@ function formatNumber(n: number) {
   } catch {
     return String(n);
   }
-}
-
-function StatPill({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string | number;
-  color?: string;
-}) {
-  const ring = color
-    ? `0 0 0 4px color-mix(in oklab, ${color} 18%, transparent)`
-    : "none";
-  const valColor = color ? color : "inherit";
-  return (
-    <div
-      className="rounded-2xl border px-4 py-3"
-      style={{
-        background: "var(--surface)",
-        borderColor: "var(--border)",
-        boxShadow: ring,
-      }}
-    >
-      <div className="text-2xl font-semibold" style={{ color: valColor }}>
-        {value}
-      </div>
-      <div className="text-xs text-[var(--muted)] mt-0.5">{label}</div>
-    </div>
-  );
 }
 
 function Tag({ children }: { children: React.ReactNode }) {

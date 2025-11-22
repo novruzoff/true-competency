@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useTheme } from "next-themes";
+import Image from "next/image";
 
 // TYPES
 type Competency = {
@@ -361,15 +362,19 @@ export default function CommitteeHome() {
             </h1>
             <div className="accent-underline mt-3" />
             <div className="mt-4 flex items-center gap-5">
-              <img
+              <Image
                 src="/APSC_Logo.png"
                 alt="Asian Pacific Society of Cardiology logo"
                 className="h-20 w-auto object-contain"
+                width={80}
+                height={80}
               />
-              <img
+              <Image
                 src={tcipLogoSrc}
                 alt="TCIP logo"
                 className="h-20 w-auto object-contain"
+                width={80}
+                height={80}
               />
             </div>
             <p className="mt-2 text-sm md:text-base text-[var(--muted)]">

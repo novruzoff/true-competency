@@ -530,7 +530,7 @@ function ExampleCompetencyShowcase({
               Country momentum
             </div>
             <div className="mt-3 space-y-2">
-              {SAMPLE_COUNTRIES.map((entry, idx) => (
+              {SAMPLE_COUNTRIES.map((entry) => (
                 <div
                   key={entry.label}
                   className="flex items-center justify-between text-sm"
