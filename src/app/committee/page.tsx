@@ -143,7 +143,7 @@ export default function CommitteeHome() {
         const suggestedRows = (sug ?? []) as SuggestedCompetency[];
 
         // build map of proposer names
-        let namesMap: Record<string, string> = {};
+        const namesMap: Record<string, string> = {};
         const proposerIds = Array.from(
           new Set(
             suggestedRows
@@ -384,7 +384,7 @@ export default function CommitteeHome() {
 
       const suggestedRows = (sug ?? []) as SuggestedCompetency[];
 
-      let namesMap: Record<string, string> = {};
+      const namesMap: Record<string, string> = {};
       const proposerIds = Array.from(
         new Set(
           suggestedRows
