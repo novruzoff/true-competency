@@ -22,6 +22,7 @@ type SuggestedCompetency = {
   tags: string[] | null;
   justification: string | null;
   created_at?: string | null;
+  suggested_by?: string | null;
 };
 
 type Profile = {
@@ -59,6 +60,9 @@ export default function CommitteeHome() {
   const [myVotes, setMyVotes] = useState<Record<string, boolean>>({}); // key: stage_id
   const [voteCounts, setVoteCounts] = useState<
     Record<string, { forCount: number; againstCount: number }>
+  >({});
+  const [suggestedByNames, setSuggestedByNames] = useState<
+    Record<string, string>
   >({});
 
   const [loading, setLoading] = useState(true);
@@ -132,10 +136,49 @@ export default function CommitteeHome() {
         // suggested competencies
         const { data: sug, error: sErr } = await supabase
           .from("competencies_stage")
-          .select("id, name, difficulty, tags, justification")
+          .select("id, name, difficulty, tags, justification, suggested_by")
           .order("name", { ascending: true });
         if (sErr) throw sErr;
-        if (!cancelled) setSuggested((sug ?? []) as SuggestedCompetency[]);
+
+        const suggestedRows = (sug ?? []) as SuggestedCompetency[];
+
+        // build map of proposer names
+        const namesMap: Record<string, string> = {};
+        const proposerIds = Array.from(
+          new Set(
+            suggestedRows
+              .map((r) => r.suggested_by)
+              .filter((v): v is string => !!v)
+          )
+        );
+
+        if (proposerIds.length > 0) {
+          const { data: proposerProfiles, error: proposerErr } = await supabase
+            .from("profiles")
+            .select("id, full_name, first_name, last_name, email")
+            .in("id", proposerIds);
+          if (!proposerErr && proposerProfiles) {
+            for (const p of proposerProfiles as Array<{
+              id: string;
+              full_name: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              email: string | null;
+            }>) {
+              const display =
+                p.full_name ||
+                [p.first_name ?? "", p.last_name ?? ""].join(" ").trim() ||
+                p.email ||
+                "Committee member";
+              namesMap[p.id] = display;
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setSuggested(suggestedRows);
+          setSuggestedByNames(namesMap);
+        }
 
         // committee votes: my votes + aggregate counts
         const { data: votes, error: vErr } = await supabase
@@ -323,6 +366,7 @@ export default function CommitteeHome() {
         difficulty,
         tags: selectedTags,
         justification: proposeReason.trim() || null,
+        suggested_by: me?.id ?? null,
       });
       if (error) throw error;
       setProposeOpen(false);
@@ -335,9 +379,45 @@ export default function CommitteeHome() {
       // refresh suggested list
       const { data: sug } = await supabase
         .from("competencies_stage")
-        .select("id, name, difficulty, tags, justification")
+        .select("id, name, difficulty, tags, justification, suggested_by")
         .order("name", { ascending: true });
-      setSuggested((sug ?? []) as SuggestedCompetency[]);
+
+      const suggestedRows = (sug ?? []) as SuggestedCompetency[];
+
+      const namesMap: Record<string, string> = {};
+      const proposerIds = Array.from(
+        new Set(
+          suggestedRows
+            .map((r) => r.suggested_by)
+            .filter((v): v is string => !!v)
+        )
+      );
+
+      if (proposerIds.length > 0) {
+        const { data: proposerProfiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, first_name, last_name, email")
+          .in("id", proposerIds);
+        if (proposerProfiles) {
+          for (const p of proposerProfiles as Array<{
+            id: string;
+            full_name: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            email: string | null;
+          }>) {
+            const display =
+              p.full_name ||
+              [p.first_name ?? "", p.last_name ?? ""].join(" ").trim() ||
+              p.email ||
+              "Committee member";
+            namesMap[p.id] = display;
+          }
+        }
+      }
+
+      setSuggested(suggestedRows);
+      setSuggestedByNames(namesMap);
     } catch (e) {
       setErr(
         e instanceof Error
@@ -576,6 +656,9 @@ export default function CommitteeHome() {
                     Justification
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
+                    Suggested by
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
                     Vote
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--muted)]">
@@ -626,6 +709,12 @@ export default function CommitteeHome() {
                       </td>
                       <td className="px-3 py-2 align-middle text-xs text-[var(--muted)] max-w-[300px]">
                         {c.justification ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 align-middle text-xs text-[var(--muted)] whitespace-nowrap w-40">
+                        {c.suggested_by
+                          ? suggestedByNames[c.suggested_by] ??
+                            "Committee member"
+                          : "Committee member"}
                       </td>
                       <td className="px-3 py-2 align-middle">
                         <div className="flex gap-2">
